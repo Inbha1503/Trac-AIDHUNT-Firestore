@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
         WithdrawalEntity::class,
         AppSettingsEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -119,13 +119,21 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Force re-login through Firebase Auth on all existing devices
+                // so that FirebaseAuth.currentUser is set before Firestore sync runs
+                db.execSQL("UPDATE app_settings SET isLoggedIn = 0 WHERE id = 1")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "aidhunt_trac_v5.db"
-                ).addMigrations(MIGRATION_4_5)
+                ).addMigrations(MIGRATION_4_5, MIGRATION_5_6)
                 .fallbackToDestructiveMigration(false)
                 .addCallback(DatabaseCallback(context.applicationContext))
                 .build()
@@ -165,7 +173,7 @@ abstract class AppDatabase : RoomDatabase() {
                     defaultHourlyRate = 1100.0,
                     language = "EN",
                     sharedAccountId = "AIDHUNT-TRAC-SHARED-01",
-                    isLoggedIn = true,
+                    isLoggedIn = false,
                     activePartnerName = "Muthu (Owner)",
                     activePartnerPhone = "+91 98421 54321",
                     lastSyncTime = System.currentTimeMillis()

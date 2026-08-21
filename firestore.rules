@@ -1,0 +1,80 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isMemberOfBusiness(businessId) {
+      return isAuthenticated() && (
+        // Check if user is registered in the business members collection
+        exists(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid)) ||
+        // Or check custom claims / tokens
+        request.auth.token.businessId == businessId
+      );
+    }
+
+    function isOwner(businessId) {
+      return isMemberOfBusiness(businessId) &&
+        get(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid)).data.role == "OWNER";
+    }
+
+    // Business Scope Rules
+    match /businesses/{businessId} {
+      // Business metadata
+      allow read: if isMemberOfBusiness(businessId);
+      allow create: if isAuthenticated();
+      allow update, delete: if isOwner(businessId);
+
+      // Members subcollection
+      match /members/{userId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow create, update, delete: if isOwner(businessId) || (isAuthenticated() && request.auth.uid == userId);
+      }
+
+      // Customers collection
+      match /customers/{customerId} {
+        allow read, write: if isMemberOfBusiness(businessId);
+      }
+
+      // Jobs collection
+      match /jobs/{jobId} {
+        allow read, write: if isMemberOfBusiness(businessId);
+      }
+
+      // Expenses collection
+      match /expenses/{expenseId} {
+        allow read, write: if isMemberOfBusiness(businessId);
+      }
+
+      // Withdrawals collection
+      match /withdrawals/{withdrawalId} {
+        allow read, write: if isMemberOfBusiness(businessId);
+      }
+
+      // Tractors collection
+      match /tractors/{tractorId} {
+        allow read, write: if isMemberOfBusiness(businessId);
+      }
+
+      // Partners collection
+      match /partners/{partnerId} {
+        allow read, write: if isMemberOfBusiness(businessId);
+      }
+
+      // App Settings document
+      match /settings/{docId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow write: if isOwner(businessId);
+      }
+    }
+
+    // Deny all other access by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

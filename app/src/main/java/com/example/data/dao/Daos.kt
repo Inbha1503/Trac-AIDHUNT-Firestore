@@ -40,6 +40,9 @@ interface PartnerDao {
 
     @Query("UPDATE partners SET isSynced = 1, syncStatus = 'SYNCED' WHERE id IN (:ids)")
     suspend fun markPartnersSynced(ids: List<Long>)
+
+    @Query("DELETE FROM partners")
+    suspend fun deleteAllPartners()
 }
 
 @Dao
@@ -67,6 +70,9 @@ interface TractorDao {
 
     @Query("UPDATE tractors SET isSynced = 1, syncStatus = 'SYNCED' WHERE id IN (:ids)")
     suspend fun markTractorsSynced(ids: List<Long>)
+
+    @Query("DELETE FROM tractors")
+    suspend fun deleteAllTractors()
 }
 
 @Dao
@@ -106,6 +112,9 @@ interface CustomerDao {
 
     @Query("SELECT COUNT(*) FROM customers WHERE isSynced = 0 OR syncStatus != 'SYNCED'")
     fun getUnsyncedCount(): Flow<Int>
+
+    @Query("DELETE FROM customers")
+    suspend fun deleteAllCustomers()
 }
 
 @Dao
@@ -148,6 +157,9 @@ interface JobEntryDao {
 
     @Query("SELECT COUNT(*) FROM job_entries WHERE isSynced = 0 OR syncStatus != 'SYNCED'")
     fun getUnsyncedCount(): Flow<Int>
+
+    @Query("DELETE FROM job_entries")
+    suspend fun deleteAllJobs()
 }
 
 @Dao
@@ -181,6 +193,9 @@ interface ExpenseDao {
 
     @Query("SELECT COUNT(*) FROM expenses WHERE isSynced = 0 OR syncStatus != 'SYNCED'")
     fun getUnsyncedCount(): Flow<Int>
+
+    @Query("DELETE FROM expenses")
+    suspend fun deleteAllExpenses()
 }
 
 @Dao
@@ -214,6 +229,9 @@ interface WithdrawalDao {
 
     @Query("SELECT COUNT(*) FROM withdrawals WHERE isSynced = 0 OR syncStatus != 'SYNCED'")
     fun getUnsyncedCount(): Flow<Int>
+
+    @Query("DELETE FROM withdrawals")
+    suspend fun deleteAllWithdrawals()
 }
 
 @Dao

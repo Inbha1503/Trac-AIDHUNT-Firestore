@@ -74,7 +74,8 @@ enum class AuthMethod {
 @Composable
 fun LoginScreen(
     partners: List<PartnerEntity> = emptyList(),
-    onLoginSuccess: (phone: String, otp: String) -> Unit,
+    onSendOtp: (phone: String, onCodeSent: (String) -> Unit, onError: (String) -> Unit) -> Unit,
+    onVerifyOtp: (phone: String, verificationId: String, otp: String) -> Unit,
     onGmailLoginRequested: ((email: String) -> Unit)? = null,
     isLoggingIn: Boolean = false,
     initialAuthMethod: AuthMethod = AuthMethod.PHONE
@@ -85,6 +86,9 @@ fun LoginScreen(
     var phoneNumber by remember { mutableStateOf("") }
     var otpCode by remember { mutableStateOf("") }
     var isOtpSent by remember { mutableStateOf(false) }
+    var verificationId by remember { mutableStateOf("") }
+    var authError by remember { mutableStateOf<String?>(null) }
+    var isSendingOtp by remember { mutableStateOf(false) }
 
     // Gmail Auth State
     var gmailAddress by remember { mutableStateOf("") }
@@ -350,7 +354,8 @@ fun LoginScreen(
                                     onDone = {
                                         focusManager.clearFocus()
                                         if (phoneNumber.isNotBlank() && otpCode.isNotBlank()) {
-                                            onLoginSuccess(phoneNumber, otpCode)
+                                            authError = null
+                                            onVerifyOtp(phoneNumber, verificationId, otpCode)
                                         }
                                     }
                                 ),
@@ -367,10 +372,22 @@ fun LoginScreen(
                                 shape = RoundedCornerShape(12.dp)
                             )
 
+                            if (authError != null) {
+                                Text(
+                                    text = authError ?: "",
+                                    color = AlertDueRed,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                                    textAlign = TextAlign.Start
+                                )
+                            }
+
                             Button(
                                 onClick = {
                                     focusManager.clearFocus()
-                                    onLoginSuccess(phoneNumber, otpCode)
+                                    authError = null
+                                    onVerifyOtp(phoneNumber, verificationId, otpCode)
                                 },
                                 enabled = !isLoggingIn && phoneNumber.isNotBlank() && otpCode.isNotBlank(),
                                 modifier = Modifier
@@ -396,12 +413,36 @@ fun LoginScreen(
                                 }
                             }
                         } else {
+                            if (authError != null) {
+                                Text(
+                                    text = authError ?: "",
+                                    color = AlertDueRed,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                                    textAlign = TextAlign.Start
+                                )
+                            }
+
                             Button(
                                 onClick = {
                                     focusManager.clearFocus()
-                                    isOtpSent = true
+                                    isSendingOtp = true
+                                    authError = null
+                                    onSendOtp(
+                                        phoneNumber,
+                                        { verId ->
+                                            verificationId = verId
+                                            isOtpSent = true
+                                            isSendingOtp = false
+                                        },
+                                        { error ->
+                                            authError = error
+                                            isSendingOtp = false
+                                        }
+                                    )
                                 },
-                                enabled = phoneNumber.isNotBlank(),
+                                enabled = !isSendingOtp && phoneNumber.isNotBlank(),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(if (responsive.isSmallPhone) 46.dp else 50.dp)
@@ -409,12 +450,20 @@ fun LoginScreen(
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = DeepSageGreen)
                             ) {
-                                Text(
-                                    text = "Continue / Get Login OTP",
-                                    fontSize = if (responsive.isSmallPhone) 14.sp else 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
+                                if (isSendingOtp) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        modifier = Modifier.size(22.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text(
+                                        text = "Continue / Get Login OTP",
+                                        fontSize = if (responsive.isSmallPhone) 14.sp else 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
                             }
                         }
                     }
@@ -520,7 +569,21 @@ fun LoginScreen(
                                 phoneNumber = partner.phone
                                 otpCode = "8890"
                                 selectedMethod = AuthMethod.PHONE
-                                onLoginSuccess(partner.phone, "8890")
+                                isSendingOtp = true
+                                authError = null
+                                onSendOtp(
+                                    partner.phone,
+                                    { verId ->
+                                        verificationId = verId
+                                        isOtpSent = true
+                                        isSendingOtp = false
+                                        onVerifyOtp(partner.phone, verId, "8890")
+                                    },
+                                    { error ->
+                                        authError = error
+                                        isSendingOtp = false
+                                    }
+                                )
                             },
                             modifier = Modifier
                                 .weight(1f)

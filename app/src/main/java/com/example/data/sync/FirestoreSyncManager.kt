@@ -15,6 +15,7 @@ import com.example.data.entity.SyncStatus
 import com.example.data.sync.FirestoreMappers.toFirestore
 import com.example.data.sync.FirestoreMappers.toRoomEntity
 import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.Dispatchers
@@ -114,6 +115,9 @@ class FirestoreSyncManager(
         _syncState.value = SyncState.Syncing
 
         try {
+            // STEP 0: Self-register this user as a member in Firestore (idempotent)
+            registerCurrentUserAsMember(db, businessId)
+
             // STEP A: Upload Pending Local Records to Firestore
             uploadPendingCustomers(db, businessId, deviceId)
             uploadPendingTractors(db, businessId, deviceId)
@@ -146,6 +150,36 @@ class FirestoreSyncManager(
             Log.e(TAG, "Sync failed safely: ${e.message}", e)
             _syncState.value = SyncState.Error(e.message ?: "Sync temporary failure")
             false
+        }
+    }
+
+    // ================= MEMBER SELF-REGISTRATION =================
+
+    /**
+     * Writes the current Firebase Auth user into /businesses/{id}/members/{uid}.
+     * Uses SetOptions.merge() so it won't overwrite an existing role.
+     * Safe to call on every sync — idempotent.
+     */
+    private suspend fun registerCurrentUserAsMember(db: FirebaseFirestore, businessId: String) {
+        try {
+            val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+            val memberRef = db.collection("businesses").document(businessId)
+                .collection("members").document(uid)
+            // Only set role if document doesn't exist yet to avoid overwriting OWNER -> PARTNER
+            val existing = memberRef.get().await()
+            if (!existing.exists()) {
+                memberRef.set(
+                    mapOf(
+                        "uid" to uid,
+                        "role" to "OWNER",
+                        "joinedAt" to System.currentTimeMillis(),
+                        "deviceId" to getDeviceId()
+                    )
+                ).await()
+                Log.d(TAG, "Member registered for businessId=$businessId uid=$uid")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not register member (non-fatal): ${e.message}")
         }
     }
 

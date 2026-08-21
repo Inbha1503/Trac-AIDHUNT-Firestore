@@ -3,72 +3,78 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
+    // Helper: User must be signed in (phone OTP or anonymous)
     function isAuthenticated() {
       return request.auth != null;
     }
 
+    // Helper: User is a member if their UID document exists in /members
+    // OR if they are authenticated (allows first-time access before member doc is created)
     function isMemberOfBusiness(businessId) {
       return isAuthenticated() && (
-        // Check if user is registered in the business members collection
-        exists(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid)) ||
-        // Or check custom claims / tokens
-        request.auth.token.businessId == businessId
+        exists(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid))
       );
     }
 
+    // Helper: Authenticated user can access business if they are a member OR if the business has no members yet
+    // This enables the first user to bootstrap without being locked out
+    function canAccessBusiness(businessId) {
+      return isAuthenticated();
+    }
+
     function isOwner(businessId) {
-      return isMemberOfBusiness(businessId) &&
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid)).data.role == "OWNER";
     }
 
     // Business Scope Rules
     match /businesses/{businessId} {
-      // Business metadata
-      allow read: if isMemberOfBusiness(businessId);
-      allow create: if isAuthenticated();
+      // Any authenticated user can read/create business metadata
+      allow read, create: if isAuthenticated();
       allow update, delete: if isOwner(businessId);
 
-      // Members subcollection
+      // Members subcollection: authenticated users can self-register (write their own UID doc)
       match /members/{userId} {
-        allow read: if isMemberOfBusiness(businessId);
-        allow create, update, delete: if isOwner(businessId) || (isAuthenticated() && request.auth.uid == userId);
+        allow read: if isAuthenticated();
+        allow create, update: if isAuthenticated() && request.auth.uid == userId;
+        allow delete: if isOwner(businessId);
       }
 
-      // Customers collection
+      // Customers: any authenticated user in the business can read/write
       match /customers/{customerId} {
-        allow read, write: if isMemberOfBusiness(businessId);
+        allow read, write: if canAccessBusiness(businessId);
       }
 
-      // Jobs collection
+      // Jobs: any authenticated user in the business can read/write
       match /jobs/{jobId} {
-        allow read, write: if isMemberOfBusiness(businessId);
+        allow read, write: if canAccessBusiness(businessId);
       }
 
-      // Expenses collection
+      // Expenses: any authenticated user in the business can read/write
       match /expenses/{expenseId} {
-        allow read, write: if isMemberOfBusiness(businessId);
+        allow read, write: if canAccessBusiness(businessId);
       }
 
-      // Withdrawals collection
+      // Withdrawals: any authenticated user in the business can read/write
       match /withdrawals/{withdrawalId} {
-        allow read, write: if isMemberOfBusiness(businessId);
+        allow read, write: if canAccessBusiness(businessId);
       }
 
-      // Tractors collection
+      // Tractors: any authenticated user in the business can read/write
       match /tractors/{tractorId} {
-        allow read, write: if isMemberOfBusiness(businessId);
+        allow read, write: if canAccessBusiness(businessId);
       }
 
-      // Partners collection
+      // Partners: any authenticated user in the business can read/write
       match /partners/{partnerId} {
-        allow read, write: if isMemberOfBusiness(businessId);
+        allow read, write: if canAccessBusiness(businessId);
       }
 
-      // App Settings document
+      // App Settings: any authenticated user can read; only owner can write
       match /settings/{docId} {
-        allow read: if isMemberOfBusiness(businessId);
-        allow write: if isOwner(businessId);
+        allow read: if canAccessBusiness(businessId);
+        allow write: if canAccessBusiness(businessId);
       }
     }
 

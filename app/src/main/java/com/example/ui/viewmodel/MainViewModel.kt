@@ -21,6 +21,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.google.firebase.FirebaseException
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.PhoneAuthCredential
+import com.google.firebase.auth.PhoneAuthOptions
+import com.google.firebase.auth.PhoneAuthProvider
+import kotlinx.coroutines.tasks.await
+import java.util.concurrent.TimeUnit
 
 enum class BottomTab {
     HOME,
@@ -52,6 +59,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = TractorRepository(database)
     private val networkMonitor = NetworkMonitor(application)
     private val syncManager = com.example.data.sync.FirestoreSyncManager(application, database)
+
+    private val firebaseAuth: FirebaseAuth? by lazy {
+        try {
+            if (com.google.firebase.FirebaseApp.getApps(application).isNotEmpty()) {
+                FirebaseAuth.getInstance()
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MainViewModel", "Firebase Auth not available: ${e.message}")
+            null
+        }
+    }
 
     // Sync State
     private val _isSyncing = MutableStateFlow(false)
@@ -487,6 +507,156 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             _isSyncing.value = false
             onComplete()
+        }
+    }
+
+    fun sendVerificationCode(
+        phone: String,
+        activity: android.app.Activity,
+        onCodeSent: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val auth = firebaseAuth
+        if (auth == null) {
+            // Local fallback logic
+            onCodeSent("mock_verification_id")
+            return
+        }
+
+        // Clean phone number format for Firebase Auth (needs country code, e.g. +91)
+        val formattedPhone = if (!phone.startsWith("+")) {
+            "+91$phone"
+        } else {
+            phone
+        }
+
+        val callbacks = object : PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
+            override fun onVerificationCompleted(credential: PhoneAuthCredential) {
+                viewModelScope.launch {
+                    try {
+                        auth.signInWithCredential(credential).await()
+                        val current = settings.value
+                        repository.updateSettings(
+                            current.copy(
+                                isLoggedIn = true,
+                                activePartnerPhone = phone
+                            )
+                        )
+                        pushUnsyncedToCloud()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+
+            override fun onVerificationFailed(e: FirebaseException) {
+                onError(e.message ?: "Verification failed")
+            }
+
+            override fun onCodeSent(
+                verificationId: String,
+                token: PhoneAuthProvider.ForceResendingToken
+            ) {
+                onCodeSent(verificationId)
+            }
+        }
+
+        val options = PhoneAuthOptions.newBuilder(auth)
+            .setPhoneNumber(formattedPhone)
+            .setTimeout(60L, TimeUnit.SECONDS)
+            .setActivity(activity)
+            .setCallbacks(callbacks)
+            .build()
+        
+        PhoneAuthProvider.verifyPhoneNumber(options)
+    }
+
+    fun verifyPhoneOtp(
+        verificationId: String,
+        otp: String,
+        phone: String,
+        onComplete: (Boolean, String?) -> Unit
+    ) {
+        val auth = firebaseAuth
+        if (auth == null || verificationId == "mock_verification_id") {
+            // Local fallback logic
+            viewModelScope.launch {
+                _isSyncing.value = true
+                delay(800)
+                val current = settings.value
+                repository.updateSettings(
+                    current.copy(
+                        isLoggedIn = true,
+                        activePartnerPhone = phone
+                    )
+                )
+                _isSyncing.value = false
+                onComplete(true, null)
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            _isSyncing.value = true
+            try {
+                val credential = PhoneAuthProvider.getCredential(verificationId, otp)
+                auth.signInWithCredential(credential).await()
+                
+                // Update settings
+                val current = settings.value
+                repository.updateSettings(
+                    current.copy(
+                        isLoggedIn = true,
+                        activePartnerPhone = phone
+                    )
+                )
+                pushUnsyncedToCloud()
+                _isSyncing.value = false
+                onComplete(true, null)
+            } catch (e: Exception) {
+                _isSyncing.value = false
+                onComplete(false, e.message ?: "Authentication failed")
+            }
+        }
+    }
+
+    fun loginAnonymously(onComplete: (Boolean, String?) -> Unit) {
+        val auth = firebaseAuth
+        if (auth == null) {
+            viewModelScope.launch {
+                _isSyncing.value = true
+                delay(800)
+                val current = settings.value
+                repository.updateSettings(
+                    current.copy(
+                        isLoggedIn = true,
+                        activePartnerPhone = "gmail@partner.com"
+                    )
+                )
+                _isSyncing.value = false
+                onComplete(true, null)
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            _isSyncing.value = true
+            try {
+                auth.signInAnonymously().await()
+                val current = settings.value
+                repository.updateSettings(
+                    current.copy(
+                        isLoggedIn = true,
+                        activePartnerPhone = "gmail@partner.com"
+                    )
+                )
+                pushUnsyncedToCloud()
+                _isSyncing.value = false
+                onComplete(true, null)
+            } catch (e: Exception) {
+                _isSyncing.value = false
+                onComplete(false, e.message ?: "Anonymous sign-in failed")
+            }
         }
     }
 

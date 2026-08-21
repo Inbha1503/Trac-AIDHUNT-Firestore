@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                MainAppContent(viewModel = viewModel, onShowToast = { msg ->
+                MainAppContent(activity = this, viewModel = viewModel, onShowToast = { msg ->
                     Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
                 })
             }
@@ -50,6 +50,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MainAppContent(
+    activity: Activity,
     viewModel: MainViewModel,
     onShowToast: (String) -> Unit
 ) {
@@ -198,13 +199,26 @@ fun MainAppContent(
     if (!settings.isLoggedIn) {
         LoginScreen(
             partners = partners,
-            onLoginSuccess = { phone, otp ->
-                viewModel.loginWithOtp(phone, otp) {
-                    onShowToast(if (isTamil) "பகிரப்பட்ட கணக்கில் உள்நுழைந்தது" else "Logged in to Shared Account")
+            onSendOtp = { phone, onCodeSent, onError ->
+                viewModel.sendVerificationCode(phone, activity, onCodeSent, onError)
+            },
+            onVerifyOtp = { phone, verificationId, otp ->
+                viewModel.verifyPhoneOtp(verificationId, otp, phone) { success, error ->
+                    if (success) {
+                        onShowToast(if (isTamil) "பகிரப்பட்ட கணக்கில் உள்நுழைந்தது" else "Logged in to Shared Account")
+                    } else {
+                        onShowToast(error ?: "Login failed")
+                    }
                 }
             },
             onGmailLoginRequested = { email ->
-                onShowToast(if (isTamil) "ஜிமெயில் உள்நுழைவு விரைவில் செயல்படுத்தப்படும் ($email)" else "Gmail authentication will be available in the next release ($email)")
+                viewModel.loginAnonymously { success, error ->
+                    if (success) {
+                        onShowToast(if (isTamil) "பகிரப்பட்ட கணக்கில் உள்நுழைந்தது" else "Logged in to Shared Account")
+                    } else {
+                        onShowToast(error ?: "Login failed")
+                    }
+                }
             },
             isLoggingIn = isSyncing
         )

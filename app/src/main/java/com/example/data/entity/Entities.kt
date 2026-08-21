@@ -25,8 +25,8 @@ data class PartnerEntity(
     val createdBy: String = "",
     val deviceId: String = "",
     val version: Long = 1L,
-    val isSynced: Boolean = true,
-    val syncStatus: String = SyncStatus.SYNCED.name,
+    val isSynced: Boolean = false,
+    val syncStatus: String = SyncStatus.PENDING.name,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
@@ -44,8 +44,8 @@ data class TractorEntity(
     val createdBy: String = "",
     val deviceId: String = "",
     val version: Long = 1L,
-    val isSynced: Boolean = true,
-    val syncStatus: String = SyncStatus.SYNCED.name,
+    val isSynced: Boolean = false,
+    val syncStatus: String = SyncStatus.PENDING.name,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
@@ -64,8 +64,8 @@ data class CustomerEntity(
     val createdBy: String = "",
     val deviceId: String = "",
     val version: Long = 1L,
-    val isSynced: Boolean = true,
-    val syncStatus: String = SyncStatus.SYNCED.name,
+    val isSynced: Boolean = false,
+    val syncStatus: String = SyncStatus.PENDING.name,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
@@ -97,8 +97,8 @@ data class JobEntryEntity(
     val createdBy: String = addedByPartner,
     val deviceId: String = "",
     val version: Long = 1L,
-    val isSynced: Boolean = true,
-    val syncStatus: String = SyncStatus.SYNCED.name,
+    val isSynced: Boolean = false,
+    val syncStatus: String = SyncStatus.PENDING.name,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
@@ -122,8 +122,8 @@ data class ExpenseEntity(
     val createdBy: String = addedByPartner,
     val deviceId: String = "",
     val version: Long = 1L,
-    val isSynced: Boolean = true,
-    val syncStatus: String = SyncStatus.SYNCED.name,
+    val isSynced: Boolean = false,
+    val syncStatus: String = SyncStatus.PENDING.name,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
@@ -143,8 +143,8 @@ data class WithdrawalEntity(
     val createdBy: String = partnerName,
     val deviceId: String = "",
     val version: Long = 1L,
-    val isSynced: Boolean = true,
-    val syncStatus: String = SyncStatus.SYNCED.name,
+    val isSynced: Boolean = false,
+    val syncStatus: String = SyncStatus.PENDING.name,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
@@ -162,7 +162,7 @@ data class AppSettingsEntity(
     val currency: String = "₹",
     val language: String = "EN", // "EN", "TA" (Tamil)
     val sharedAccountId: String = "AIDHUNT-TRAC-SHARED-01",
-    val isLoggedIn: Boolean = true,
+    val isLoggedIn: Boolean = false,
     val activePartnerName: String = "Muthu (Owner)",
     val activePartnerPhone: String = "+91 98421 54321",
     val profilePhotoUri: String = "",

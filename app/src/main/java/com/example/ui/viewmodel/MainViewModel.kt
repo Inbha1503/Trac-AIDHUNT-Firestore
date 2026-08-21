@@ -249,8 +249,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val isCurrentlyOnline = isEffectiveOnline.value
-                val jobToSave = job.copy(isSynced = false)
-                val expenseToSave = linkedExpense?.copy(isSynced = false)
+                val jobToSave = job.copy(isSynced = false, syncStatus = com.example.data.entity.SyncStatus.PENDING.name)
+                val expenseToSave = linkedExpense?.copy(isSynced = false, syncStatus = com.example.data.entity.SyncStatus.PENDING.name)
                 repository.saveJobEntry(jobToSave, expenseToSave)
 
                 // Clear the draft only upon successful persistence
@@ -281,7 +281,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun addExpense(expense: ExpenseEntity, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             val isCurrentlyOnline = isEffectiveOnline.value
-            val expToSave = expense.copy(isSynced = false)
+            val expToSave = expense.copy(isSynced = false, syncStatus = com.example.data.entity.SyncStatus.PENDING.name)
             repository.addExpense(expToSave)
 
             if (isCurrentlyOnline) {
@@ -296,7 +296,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateExpense(expense: ExpenseEntity, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             val isCurrentlyOnline = isEffectiveOnline.value
-            val expToSave = expense.copy(isSynced = false)
+            val expToSave = expense.copy(isSynced = false, syncStatus = com.example.data.entity.SyncStatus.PENDING.name)
             repository.updateExpense(expToSave)
 
             if (isCurrentlyOnline) {
@@ -318,7 +318,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun addWithdrawal(withdrawal: WithdrawalEntity, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             val isCurrentlyOnline = isEffectiveOnline.value
-            val withToSave = withdrawal.copy(isSynced = false)
+            val withToSave = withdrawal.copy(isSynced = false, syncStatus = com.example.data.entity.SyncStatus.PENDING.name)
             repository.addWithdrawal(withToSave)
 
             if (isCurrentlyOnline) {
@@ -342,7 +342,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateCustomer(customer: CustomerEntity, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             val isCurrentlyOnline = isEffectiveOnline.value
-            repository.updateCustomer(customer.copy(isSynced = false))
+            repository.updateCustomer(customer.copy(isSynced = false, syncStatus = com.example.data.entity.SyncStatus.PENDING.name))
 
             if (isCurrentlyOnline) {
                 pushUnsyncedToCloud()

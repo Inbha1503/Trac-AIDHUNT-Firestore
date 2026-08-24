@@ -8,6 +8,7 @@ import com.example.data.entity.JobEntryEntity
 import com.example.data.entity.PartnerEntity
 import com.example.data.entity.TractorEntity
 import com.example.data.entity.WithdrawalEntity
+import com.example.data.util.IdGenerator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 
@@ -45,7 +46,12 @@ class TractorRepository(private val database: AppDatabase) {
     // 2. Partners
     val allPartners: Flow<List<PartnerEntity>> = partnerDao.getAllPartners()
 
-    suspend fun addPartner(partner: PartnerEntity): Long = partnerDao.insertPartner(partner)
+    suspend fun addPartner(partner: PartnerEntity): Long {
+        val safeId = if (partner.id > 0) partner.id else IdGenerator.generateId()
+        val toInsert = partner.copy(id = safeId)
+        partnerDao.insertPartner(toInsert)
+        return safeId
+    }
 
     suspend fun updatePartner(partner: PartnerEntity) = partnerDao.updatePartner(partner)
 
@@ -54,7 +60,12 @@ class TractorRepository(private val database: AppDatabase) {
     // 3. Tractors
     val allTractors: Flow<List<TractorEntity>> = tractorDao.getAllTractors()
 
-    suspend fun addTractor(tractor: TractorEntity): Long = tractorDao.insertTractor(tractor)
+    suspend fun addTractor(tractor: TractorEntity): Long {
+        val safeId = if (tractor.id > 0) tractor.id else IdGenerator.generateId()
+        val toInsert = tractor.copy(id = safeId)
+        tractorDao.insertTractor(toInsert)
+        return safeId
+    }
 
     suspend fun updateTractor(tractor: TractorEntity) = tractorDao.updateTractor(tractor)
 
@@ -96,8 +107,10 @@ class TractorRepository(private val database: AppDatabase) {
             }
             existing.id
         } else {
+            val safeId = IdGenerator.generateId()
             customerDao.insertCustomer(
                 CustomerEntity(
+                    id = safeId,
                     name = name.trim(),
                     phone = cleanPhone,
                     location = cleanLocation,
@@ -106,6 +119,7 @@ class TractorRepository(private val database: AppDatabase) {
                     balanceDue = 0.0
                 )
             )
+            safeId
         }
     }
 
@@ -126,19 +140,22 @@ class TractorRepository(private val database: AppDatabase) {
             customerId = addOrFindCustomer(job.customerName, job.customerPhone, job.customerLocation)
         }
 
-        val jobId = jobEntryDao.insertJob(job.copy(customerId = customerId))
+        val safeJobId = if (job.id > 0) job.id else IdGenerator.generateId()
+        val localJob = job.copy(id = safeJobId, customerId = customerId)
+        jobEntryDao.insertJob(localJob)
 
         // If optional linked expense was provided, add it
         if (linkedExpense != null && linkedExpense.amount > 0) {
+            val safeExpId = if (linkedExpense.id > 0) linkedExpense.id else IdGenerator.generateId()
             expenseDao.insertExpense(
-                linkedExpense.copy(relatedJobId = jobId)
+                linkedExpense.copy(id = safeExpId, relatedJobId = safeJobId)
             )
         }
 
         // Recalculate customer statistics
         recalculateCustomerStats(customerId)
 
-        return jobId
+        return safeJobId
     }
 
     suspend fun deleteJob(job: JobEntryEntity) {
@@ -158,7 +175,9 @@ class TractorRepository(private val database: AppDatabase) {
         val noteDesc = if (note.isNotBlank()) "Note: $note" else ""
         val combinedNotes = listOf(methodDesc, noteDesc).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { "Direct Payment Received" }
 
+        val safeEntryId = IdGenerator.generateId()
         val paymentEntry = JobEntryEntity(
+            id = safeEntryId,
             customerId = customer.id,
             customerName = customer.name,
             customerPhone = customer.phone,
@@ -178,9 +197,9 @@ class TractorRepository(private val database: AppDatabase) {
             notes = combinedNotes
         )
 
-        val entryId = jobEntryDao.insertJob(paymentEntry)
+        jobEntryDao.insertJob(paymentEntry)
         recalculateCustomerStats(customer.id)
-        return entryId
+        return safeEntryId
     }
 
     private suspend fun recalculateCustomerStats(customerId: Long) {
@@ -205,7 +224,12 @@ class TractorRepository(private val database: AppDatabase) {
     val allExpenses: Flow<List<ExpenseEntity>> = expenseDao.getAllExpenses()
     val totalExpenses: Flow<Double?> = expenseDao.getTotalExpenses()
 
-    suspend fun addExpense(expense: ExpenseEntity): Long = expenseDao.insertExpense(expense)
+    suspend fun addExpense(expense: ExpenseEntity): Long {
+        val safeId = if (expense.id > 0) expense.id else IdGenerator.generateId()
+        val toInsert = expense.copy(id = safeId)
+        expenseDao.insertExpense(toInsert)
+        return safeId
+    }
 
     suspend fun updateExpense(expense: ExpenseEntity) = expenseDao.updateExpense(expense)
 
@@ -215,8 +239,12 @@ class TractorRepository(private val database: AppDatabase) {
     val allWithdrawals: Flow<List<WithdrawalEntity>> = withdrawalDao.getAllWithdrawals()
     val totalWithdrawn: Flow<Double?> = withdrawalDao.getTotalWithdrawn()
 
-    suspend fun addWithdrawal(withdrawal: WithdrawalEntity): Long =
-        withdrawalDao.insertWithdrawal(withdrawal)
+    suspend fun addWithdrawal(withdrawal: WithdrawalEntity): Long {
+        val safeId = if (withdrawal.id > 0) withdrawal.id else IdGenerator.generateId()
+        val toInsert = withdrawal.copy(id = safeId)
+        withdrawalDao.insertWithdrawal(toInsert)
+        return safeId
+    }
 
     suspend fun updateWithdrawal(withdrawal: WithdrawalEntity) =
         withdrawalDao.updateWithdrawal(withdrawal)

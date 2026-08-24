@@ -18,6 +18,7 @@ import com.example.data.firebase.UserProfile
 import com.example.data.firebase.Workspace
 import com.example.data.network.NetworkMonitor
 import com.example.data.repository.AuthRepository
+import com.example.data.repository.SettingsSyncState
 import com.example.data.repository.TractorRepository
 import com.example.data.repository.WorkspaceRepository
 import kotlinx.coroutines.delay
@@ -64,6 +65,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Workspace & Authentication State
     val currentWorkspace: StateFlow<Workspace?> = workspaceRepository.currentWorkspace
     val isWorkspaceInitialized: StateFlow<Boolean> = workspaceRepository.isInitialized
+    val settingsSyncState: StateFlow<SettingsSyncState> = workspaceRepository.settingsSyncState
     val authState: StateFlow<AuthState> = authRepository.authState
     val currentUserProfile: StateFlow<UserProfile?> = authRepository.currentUserProfile
     val currentUid: String?
@@ -196,19 +198,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             authState.collect { state ->
                 when (state) {
                     is AuthState.Authenticated -> {
-                        val current = settings.value
                         val prof = state.profile
-                        // Initialize Firestore Workspace & real-time snapshot listeners
+                        // Initialize Firestore Workspace, fetch cloud settings safely, and attach real-time snapshot listeners
                         workspaceRepository.initializeForUser(prof)
-
-                        repository.updateSettings(
-                            current.copy(
-                                isLoggedIn = true,
-                                activePartnerName = prof.displayName ?: current.activePartnerName.ifBlank { "Partner" },
-                                activePartnerPhone = prof.phoneNumber ?: current.activePartnerPhone,
-                                profilePhotoUri = prof.photoUrl ?: current.profilePhotoUri
-                            )
-                        )
                     }
                     is AuthState.Unauthenticated -> {
                         // Stop real-time listeners on logout

@@ -10,8 +10,8 @@ import com.example.data.entity.JobEntryEntity
 import com.example.data.entity.PartnerEntity
 import com.example.data.entity.TractorEntity
 import com.example.data.entity.WithdrawalEntity
+import com.example.data.util.IdGenerator
 import com.google.firebase.FirebaseApp
-import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -54,7 +55,8 @@ class FirestoreRepository(
     private var settingsListener: ListenerRegistration? = null
 
     /**
-     * Resolves an existing workspace or creates a canonical one for the user.
+     * Resolves an existing workspace or creates a canonical one for the user deterministically.
+     * Uses server-backed Firestore lookups to prevent multi-device race conditions.
      */
     suspend fun resolveOrCreateWorkspace(user: UserProfile): Workspace? {
         val firestore = db ?: return null
@@ -62,26 +64,61 @@ class FirestoreRepository(
         if (uid.isBlank()) return null
 
         try {
-            // Check if user profile has defaultWorkspaceId
-            var workspaceId = user.defaultWorkspaceId
+            // 1. Fetch user document directly from Firestore server
+            var workspaceId: String? = null
+            try {
+                val userDoc = firestore.collection("users").document(uid).get().await()
+                if (userDoc.exists()) {
+                    val userFromCloud = UserProfile.fromMap(userDoc.data ?: emptyMap())
+                    workspaceId = userFromCloud.defaultWorkspaceId?.ifBlank { null }
+                        ?: userFromCloud.workspaces.firstOrNull { it.isNotBlank() }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed reading user profile from cloud: ${e.message}")
+            }
+
+            // Fallback to in-memory profile if cloud fetch didn't return a workspace
             if (workspaceId.isNullOrBlank()) {
-                // Check if user has any workspace membership
-                if (user.workspaces.isNotEmpty()) {
-                    workspaceId = user.workspaces.first()
-                }
+                workspaceId = user.defaultWorkspaceId?.ifBlank { null }
+                    ?: user.workspaces.firstOrNull { it.isNotBlank() }
             }
 
+            // 2. If a workspaceId is found, check if the workspace document exists in Firestore
             if (!workspaceId.isNullOrBlank()) {
-                val wsDoc = firestore.collection("workspaces").document(workspaceId).get().await()
-                if (wsDoc.exists()) {
-                    val ws = Workspace.fromMap(wsDoc.data ?: emptyMap())
-                    _currentWorkspace.value = ws
-                    return ws
+                try {
+                    val wsDoc = firestore.collection("workspaces").document(workspaceId).get().await()
+                    if (wsDoc.exists()) {
+                        val ws = Workspace.fromMap(wsDoc.data ?: emptyMap())
+                        _currentWorkspace.value = ws
+                        return ws
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed reading workspace document $workspaceId: ${e.message}")
                 }
             }
 
-            // Create new canonical workspace for this user
-            val newWorkspaceId = "ws_${uid.replace(Regex("[^a-zA-Z0-9]"), "").take(16).ifBlank { "main" }}"
+            // 3. Compute deterministic canonical workspace ID based on UID
+            val canonicalWsId = "ws_${uid.replace(Regex("[^a-zA-Z0-9]"), "").take(16).ifBlank { "main" }}"
+
+            // Check if canonical workspace exists
+            val canonicalWsDoc = firestore.collection("workspaces").document(canonicalWsId).get().await()
+            if (canonicalWsDoc.exists()) {
+                val ws = Workspace.fromMap(canonicalWsDoc.data ?: emptyMap())
+                // Ensure user profile points to it
+                firestore.collection("users").document(uid)
+                    .set(
+                        mapOf(
+                            "defaultWorkspaceId" to canonicalWsId,
+                            "workspaces" to listOf(canonicalWsId),
+                            "updatedAt" to System.currentTimeMillis()
+                        ),
+                        SetOptions.merge()
+                    ).await()
+                _currentWorkspace.value = ws
+                return ws
+            }
+
+            // 4. Create new canonical workspace for this user
             val workspaceName = if (!user.displayName.isNullOrBlank()) {
                 "${user.displayName}'s Tractor Services"
             } else {
@@ -89,19 +126,19 @@ class FirestoreRepository(
             }
 
             val newWorkspace = Workspace(
-                workspaceId = newWorkspaceId,
+                workspaceId = canonicalWsId,
                 name = workspaceName,
                 ownerUid = uid,
                 createdAt = System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis()
             )
 
-            // 1. Create workspace document
-            firestore.collection("workspaces").document(newWorkspaceId)
+            // Create workspace document
+            firestore.collection("workspaces").document(canonicalWsId)
                 .set(newWorkspace.toMap(), SetOptions.merge())
                 .await()
 
-            // 2. Create owner member record
+            // Create owner member record
             val member = WorkspaceMember(
                 uid = uid,
                 role = "owner",
@@ -111,32 +148,72 @@ class FirestoreRepository(
                 email = user.email,
                 phoneNumber = user.phoneNumber
             )
-            firestore.collection("workspaces").document(newWorkspaceId)
+            firestore.collection("workspaces").document(canonicalWsId)
                 .collection("members").document(uid)
                 .set(member.toMap(), SetOptions.merge())
                 .await()
 
-            // 3. Link workspace in user's profile
-            val updatedUser = user.copy(
-                defaultWorkspaceId = newWorkspaceId,
-                workspaces = listOf(newWorkspaceId),
-                updatedAt = System.currentTimeMillis()
+            // Link workspace in user's profile
+            val updatedUserMap = mapOf(
+                "uid" to uid,
+                "displayName" to user.displayName,
+                "email" to user.email,
+                "phoneNumber" to user.phoneNumber,
+                "photoUrl" to user.photoUrl,
+                "defaultWorkspaceId" to canonicalWsId,
+                "workspaces" to listOf(canonicalWsId),
+                "updatedAt" to System.currentTimeMillis()
             )
             firestore.collection("users").document(uid)
-                .set(updatedUser.toMap(), SetOptions.merge())
+                .set(updatedUserMap, SetOptions.merge())
                 .await()
 
             _currentWorkspace.value = newWorkspace
             return newWorkspace
         } catch (e: Exception) {
             Log.e(TAG, "Error resolving workspace: ${e.message}", e)
+            val fallbackWsId = "ws_${uid.replace(Regex("[^a-zA-Z0-9]"), "").take(16).ifBlank { "main" }}"
             val fallbackWs = Workspace(
-                workspaceId = "ws_${uid.take(12)}",
+                workspaceId = fallbackWsId,
                 name = "AIDHUNT Agri & Tractor Services",
                 ownerUid = uid
             )
             _currentWorkspace.value = fallbackWs
             return fallbackWs
+        }
+    }
+
+    /**
+     * Fetches settings from Firestore `workspaces/{workspaceId}/settings/main`.
+     * If existing cloud settings are found, returns them so local Room cache can be updated.
+     * If no settings exist in cloud yet, writes initial settings to cloud and returns them.
+     */
+    suspend fun fetchOrCreateWorkspaceSettings(
+        workspaceId: String,
+        uid: String,
+        localSettings: AppSettingsEntity
+    ): AppSettingsEntity {
+        val firestore = db ?: return localSettings
+        val settingsDocRef = firestore.collection("workspaces").document(workspaceId)
+            .collection("settings").document("main")
+
+        return try {
+            val snapshot = settingsDocRef.get().await()
+            if (snapshot.exists() && snapshot.data != null) {
+                // Cloud settings exist: Merge with local entity
+                val remoteData = snapshot.data!!
+                val merged = appSettingsFromFirestoreMap(remoteData, localSettings)
+                Log.d(TAG, "Loaded existing cloud settings for workspace: $workspaceId")
+                merged
+            } else {
+                // No cloud settings exist yet: initialize with local settings
+                Log.d(TAG, "Initializing first-time cloud settings for workspace: $workspaceId")
+                settingsDocRef.set(localSettings.toFirestoreMap(uid), SetOptions.merge()).await()
+                localSettings
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching/creating cloud settings: ${e.message}", e)
+            localSettings
         }
     }
 
@@ -252,7 +329,7 @@ class FirestoreRepository(
                 }
             }
 
-        // 7. Settings Document Listener
+        // 7. Settings Listener
         settingsListener = wsRef.collection("settings").document("main")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
@@ -264,11 +341,11 @@ class FirestoreRepository(
                 }
             }
 
-        Log.d(TAG, "All Firestore real-time snapshot listeners started for workspace: $workspaceId")
+        Log.d(TAG, "All Firestore snapshot listeners started for workspace: $workspaceId")
     }
 
     /**
-     * Cancels and detaches all active real-time listeners.
+     * Cleanly stops and unregisters all real-time listeners.
      */
     fun stopRealtimeListeners() {
         entriesListener?.remove()
@@ -292,15 +369,15 @@ class FirestoreRepository(
         settingsListener?.remove()
         settingsListener = null
 
-        Log.d(TAG, "All Firestore real-time listeners detached.")
+        Log.d(TAG, "All Firestore snapshot listeners stopped.")
     }
 
-    // --- CRUD Cloud Mutations ---
+    // --- Direct Cloud Operations ---
 
     suspend fun saveJobEntry(workspaceId: String, job: JobEntryEntity, uid: String?) {
         val firestore = db ?: return
         try {
-            val docId = if (job.id > 0) job.id.toString() else System.currentTimeMillis().toString()
+            val docId = if (job.id > 0) job.id.toString() else IdGenerator.generateId().toString()
             firestore.collection("workspaces").document(workspaceId)
                 .collection("entries").document(docId)
                 .set(job.toFirestoreMap(uid), SetOptions.merge())
@@ -325,7 +402,7 @@ class FirestoreRepository(
     suspend fun saveExpense(workspaceId: String, expense: ExpenseEntity, uid: String?) {
         val firestore = db ?: return
         try {
-            val docId = if (expense.id > 0) expense.id.toString() else System.currentTimeMillis().toString()
+            val docId = if (expense.id > 0) expense.id.toString() else IdGenerator.generateId().toString()
             firestore.collection("workspaces").document(workspaceId)
                 .collection("expenses").document(docId)
                 .set(expense.toFirestoreMap(uid), SetOptions.merge())
@@ -350,7 +427,7 @@ class FirestoreRepository(
     suspend fun saveCustomer(workspaceId: String, customer: CustomerEntity, uid: String?) {
         val firestore = db ?: return
         try {
-            val docId = if (customer.id > 0) customer.id.toString() else System.currentTimeMillis().toString()
+            val docId = if (customer.id > 0) customer.id.toString() else IdGenerator.generateId().toString()
             firestore.collection("workspaces").document(workspaceId)
                 .collection("customers").document(docId)
                 .set(customer.toFirestoreMap(uid), SetOptions.merge())
@@ -375,7 +452,7 @@ class FirestoreRepository(
     suspend fun saveTractor(workspaceId: String, tractor: TractorEntity, uid: String?) {
         val firestore = db ?: return
         try {
-            val docId = if (tractor.id > 0) tractor.id.toString() else System.currentTimeMillis().toString()
+            val docId = if (tractor.id > 0) tractor.id.toString() else IdGenerator.generateId().toString()
             firestore.collection("workspaces").document(workspaceId)
                 .collection("tractors").document(docId)
                 .set(tractor.toFirestoreMap(uid), SetOptions.merge())
@@ -400,7 +477,7 @@ class FirestoreRepository(
     suspend fun savePartner(workspaceId: String, partner: PartnerEntity, uid: String?) {
         val firestore = db ?: return
         try {
-            val docId = if (partner.id > 0) partner.id.toString() else System.currentTimeMillis().toString()
+            val docId = if (partner.id > 0) partner.id.toString() else IdGenerator.generateId().toString()
             firestore.collection("workspaces").document(workspaceId)
                 .collection("attendees").document(docId)
                 .set(partner.toFirestoreMap(uid), SetOptions.merge())
@@ -425,7 +502,7 @@ class FirestoreRepository(
     suspend fun saveWithdrawal(workspaceId: String, withdrawal: WithdrawalEntity, uid: String?) {
         val firestore = db ?: return
         try {
-            val docId = if (withdrawal.id > 0) withdrawal.id.toString() else System.currentTimeMillis().toString()
+            val docId = if (withdrawal.id > 0) withdrawal.id.toString() else IdGenerator.generateId().toString()
             firestore.collection("workspaces").document(workspaceId)
                 .collection("withdrawals").document(docId)
                 .set(withdrawal.toFirestoreMap(uid), SetOptions.merge())
@@ -461,7 +538,7 @@ class FirestoreRepository(
 
     /**
      * Safe Migration: On first login with a new workspace, if local Room database has existing records,
-     * upload them to the workspace without duplicating.
+     * upload them to the workspace without duplicating or overwriting newer cloud data.
      */
     suspend fun migrateLocalDataIfRequired(
         workspaceId: String,
@@ -479,24 +556,64 @@ class FirestoreRepository(
         try {
             val wsRef = firestore.collection("workspaces").document(workspaceId)
             val entriesSnap = wsRef.collection("entries").limit(1).get().await()
+            val customersSnap = wsRef.collection("customers").limit(1).get().await()
 
-            // If workspace already has entries in cloud, don't overwrite with local seed data
-            if (!entriesSnap.isEmpty) {
+            // If workspace already has entries or customers in cloud, do not upload local default records
+            if (!entriesSnap.isEmpty || !customersSnap.isEmpty) {
                 prefs.edit().putBoolean(migrationKey, true).apply()
+                Log.d(TAG, "Remote workspace already has cloud data. Local seed migration skipped.")
                 return
             }
 
-            Log.d(TAG, "Migrating local Room data to workspace: $workspaceId")
+            Log.d(TAG, "Migrating local Room data to new workspace: $workspaceId")
 
-            // 1. Migrate Tractors
-            val tractorDao = database.tractorDao()
-            val tractors = database.tractorDao().getAllTractors()
-            // Pull first emission or snapshot from room
-            // Let's migrate app settings, tractors, partners, customers, jobs, expenses, withdrawals
+            val tractors = database.tractorDao().getAllTractors().firstOrNull() ?: emptyList()
+            val customers = database.customerDao().getAllCustomers().firstOrNull() ?: emptyList()
+            val jobs = database.jobEntryDao().getAllJobs().firstOrNull() ?: emptyList()
+            val expenses = database.expenseDao().getAllExpenses().firstOrNull() ?: emptyList()
+            val withdrawals = database.withdrawalDao().getAllWithdrawals().firstOrNull() ?: emptyList()
+            val partners = database.partnerDao().getAllPartners().firstOrNull() ?: emptyList()
+            val currentSettings = database.appSettingsDao().getSettingsOnce()
+
             val batch = firestore.batch()
 
-            // Settings
-            val currentSettings = database.appSettingsDao().getSettingsOnce()
+            // 1. Tractors
+            for (tractor in tractors) {
+                val docId = if (tractor.id > 0) tractor.id.toString() else IdGenerator.generateId().toString()
+                batch.set(wsRef.collection("tractors").document(docId), tractor.toFirestoreMap(uid), SetOptions.merge())
+            }
+
+            // 2. Customers
+            for (customer in customers) {
+                val docId = if (customer.id > 0) customer.id.toString() else IdGenerator.generateId().toString()
+                batch.set(wsRef.collection("customers").document(docId), customer.toFirestoreMap(uid), SetOptions.merge())
+            }
+
+            // 3. Jobs
+            for (job in jobs) {
+                val docId = if (job.id > 0) job.id.toString() else IdGenerator.generateId().toString()
+                batch.set(wsRef.collection("entries").document(docId), job.toFirestoreMap(uid), SetOptions.merge())
+            }
+
+            // 4. Expenses
+            for (expense in expenses) {
+                val docId = if (expense.id > 0) expense.id.toString() else IdGenerator.generateId().toString()
+                batch.set(wsRef.collection("expenses").document(docId), expense.toFirestoreMap(uid), SetOptions.merge())
+            }
+
+            // 5. Withdrawals
+            for (withdrawal in withdrawals) {
+                val docId = if (withdrawal.id > 0) withdrawal.id.toString() else IdGenerator.generateId().toString()
+                batch.set(wsRef.collection("withdrawals").document(docId), withdrawal.toFirestoreMap(uid), SetOptions.merge())
+            }
+
+            // 6. Partners / Attendees
+            for (partner in partners) {
+                val docId = if (partner.id > 0) partner.id.toString() else IdGenerator.generateId().toString()
+                batch.set(wsRef.collection("attendees").document(docId), partner.toFirestoreMap(uid), SetOptions.merge())
+            }
+
+            // 7. Settings
             if (currentSettings != null) {
                 batch.set(
                     wsRef.collection("settings").document("main"),
@@ -514,6 +631,6 @@ class FirestoreRepository(
     }
 
     private fun parseLongId(idStr: String): Long {
-        return idStr.toLongOrNull() ?: System.currentTimeMillis()
+        return idStr.toLongOrNull() ?: IdGenerator.generateId()
     }
 }

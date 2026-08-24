@@ -14,6 +14,7 @@ import com.example.data.firebase.FirestoreRepository
 import com.example.data.firebase.UserProfile
 import com.example.data.firebase.Workspace
 import com.example.data.firebase.appSettingsFromFirestoreMap
+import com.example.data.util.IdGenerator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +22,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+
+sealed interface SettingsSyncState {
+    object Uninitialized : SettingsSyncState
+    object Loading : SettingsSyncState
+    data class LoadedFromCloud(val settings: AppSettingsEntity) : SettingsSyncState
+    data class CreatedInCloud(val settings: AppSettingsEntity) : SettingsSyncState
+    data class Error(val message: String) : SettingsSyncState
+}
 
 class WorkspaceRepository(
     private val context: Context,
@@ -43,10 +52,14 @@ class WorkspaceRepository(
     private val _isInitialized = MutableStateFlow(false)
     val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
 
+    private val _settingsSyncState = MutableStateFlow<SettingsSyncState>(SettingsSyncState.Uninitialized)
+    val settingsSyncState: StateFlow<SettingsSyncState> = _settingsSyncState.asStateFlow()
+
     private var activeUid: String? = null
 
     /**
-     * Initializes workspace, attaches real-time snapshot listeners, and performs safe initial migration.
+     * Initializes workspace, attaches real-time snapshot listeners, resolves settings safely,
+     * and performs safe initial migration without overwriting remote data.
      */
     fun initializeForUser(userProfile: UserProfile) {
         val uid = userProfile.uid
@@ -55,15 +68,40 @@ class WorkspaceRepository(
 
         scope.launch {
             try {
-                Log.d(TAG, "Resolving workspace for user UID: $uid")
+                _settingsSyncState.value = SettingsSyncState.Loading
+                Log.d(TAG, "Resolving deterministic workspace for user UID: $uid")
+
+                // Step 1: Resolve or retrieve canonical workspace
                 val workspace = firestoreRepository.resolveOrCreateWorkspace(userProfile)
                 if (workspace != null) {
                     val wsId = workspace.workspaceId
 
-                    // Safe migration on first login if workspace has no remote records yet
+                    // Step 2: Load or initialize cloud settings before enabling writes
+                    val localSettings = appSettingsDao.getSettingsOnce() ?: AppSettingsEntity()
+                    val resolvedSettings = firestoreRepository.fetchOrCreateWorkspaceSettings(
+                        workspaceId = wsId,
+                        uid = uid,
+                        localSettings = localSettings
+                    )
+
+                    // Merge user profile details with resolved settings
+                    val mergedSettings = resolvedSettings.copy(
+                        isLoggedIn = true,
+                        activePartnerName = userProfile.displayName?.ifBlank { null }
+                            ?: resolvedSettings.activePartnerName.ifBlank { "Partner" },
+                        activePartnerPhone = userProfile.phoneNumber?.ifBlank { null }
+                            ?: resolvedSettings.activePartnerPhone,
+                        profilePhotoUri = userProfile.photoUrl?.ifBlank { null }
+                            ?: resolvedSettings.profilePhotoUri,
+                        lastSyncTime = System.currentTimeMillis()
+                    )
+                    appSettingsDao.insertOrUpdateSettings(mergedSettings)
+                    _settingsSyncState.value = SettingsSyncState.LoadedFromCloud(mergedSettings)
+
+                    // Step 3: Safe migration on first login if workspace has no remote records yet
                     firestoreRepository.migrateLocalDataIfRequired(wsId, uid, database)
 
-                    // Start real-time snapshot listeners
+                    // Step 4: Start real-time snapshot listeners
                     firestoreRepository.startRealtimeListeners(
                         workspaceId = wsId,
                         onJobsUpdated = { remoteJobs ->
@@ -110,6 +148,7 @@ class WorkspaceRepository(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error initializing workspace: ${e.message}", e)
+                _settingsSyncState.value = SettingsSyncState.Error(e.message ?: "Unknown initialization error")
             }
         }
     }
@@ -120,6 +159,7 @@ class WorkspaceRepository(
     fun stopWorkspaceListeners() {
         firestoreRepository.stopRealtimeListeners()
         _isInitialized.value = false
+        _settingsSyncState.value = SettingsSyncState.Uninitialized
         activeUid = null
         Log.d(TAG, "Workspace listeners stopped.")
     }
@@ -186,7 +226,7 @@ class WorkspaceRepository(
         }
     }
 
-    // --- CRUD Bridge (Local + Cloud) ---
+    // --- CRUD Bridge (Local + Cloud with Collision-Resistant IDs) ---
 
     suspend fun saveJobEntry(job: JobEntryEntity, linkedExpense: ExpenseEntity? = null): Long {
         var customerId = job.customerId
@@ -194,15 +234,17 @@ class WorkspaceRepository(
             customerId = addOrFindCustomer(job.customerName, job.customerPhone, job.customerLocation)
         }
 
-        val localJob = job.copy(customerId = customerId, isSynced = true)
-        val jobId = jobEntryDao.insertJob(localJob)
-        val savedJobWithId = localJob.copy(id = jobId)
+        // Generate globally unique collision-resistant ID before insert if new record
+        val safeJobId = if (job.id > 0) job.id else IdGenerator.generateId()
+        val localJob = job.copy(id = safeJobId, customerId = customerId, isSynced = true)
+        jobEntryDao.insertJob(localJob)
 
         var savedExpense: ExpenseEntity? = null
         if (linkedExpense != null && linkedExpense.amount > 0) {
-            val localExp = linkedExpense.copy(relatedJobId = jobId, isSynced = true)
-            val expId = expenseDao.insertExpense(localExp)
-            savedExpense = localExp.copy(id = expId)
+            val safeExpId = if (linkedExpense.id > 0) linkedExpense.id else IdGenerator.generateId()
+            val localExp = linkedExpense.copy(id = safeExpId, relatedJobId = safeJobId, isSynced = true)
+            expenseDao.insertExpense(localExp)
+            savedExpense = localExp
         }
 
         recalculateCustomerStats(customerId)
@@ -211,7 +253,7 @@ class WorkspaceRepository(
         val wsId = currentWorkspace.value?.workspaceId
         if (!wsId.isNullOrBlank()) {
             scope.launch {
-                firestoreRepository.saveJobEntry(wsId, savedJobWithId, activeUid)
+                firestoreRepository.saveJobEntry(wsId, localJob, activeUid)
                 if (savedExpense != null) {
                     firestoreRepository.saveExpense(wsId, savedExpense, activeUid)
                 }
@@ -222,7 +264,7 @@ class WorkspaceRepository(
             }
         }
 
-        return jobId
+        return safeJobId
     }
 
     suspend fun deleteJob(job: JobEntryEntity) {
@@ -242,8 +284,9 @@ class WorkspaceRepository(
     }
 
     suspend fun addExpense(expense: ExpenseEntity): Long {
-        val expId = expenseDao.insertExpense(expense.copy(isSynced = true))
-        val savedExp = expense.copy(id = expId, isSynced = true)
+        val safeExpId = if (expense.id > 0) expense.id else IdGenerator.generateId()
+        val savedExp = expense.copy(id = safeExpId, isSynced = true)
+        expenseDao.insertExpense(savedExp)
 
         val wsId = currentWorkspace.value?.workspaceId
         if (!wsId.isNullOrBlank()) {
@@ -251,16 +294,17 @@ class WorkspaceRepository(
                 firestoreRepository.saveExpense(wsId, savedExp, activeUid)
             }
         }
-        return expId
+        return safeExpId
     }
 
     suspend fun updateExpense(expense: ExpenseEntity) {
-        expenseDao.updateExpense(expense.copy(isSynced = true))
+        val updated = expense.copy(isSynced = true)
+        expenseDao.updateExpense(updated)
 
         val wsId = currentWorkspace.value?.workspaceId
         if (!wsId.isNullOrBlank()) {
             scope.launch {
-                firestoreRepository.saveExpense(wsId, expense, activeUid)
+                firestoreRepository.saveExpense(wsId, updated, activeUid)
             }
         }
     }
@@ -277,8 +321,9 @@ class WorkspaceRepository(
     }
 
     suspend fun addWithdrawal(withdrawal: WithdrawalEntity): Long {
-        val id = withdrawalDao.insertWithdrawal(withdrawal.copy(isSynced = true))
-        val saved = withdrawal.copy(id = id, isSynced = true)
+        val safeWithId = if (withdrawal.id > 0) withdrawal.id else IdGenerator.generateId()
+        val saved = withdrawal.copy(id = safeWithId, isSynced = true)
+        withdrawalDao.insertWithdrawal(saved)
 
         val wsId = currentWorkspace.value?.workspaceId
         if (!wsId.isNullOrBlank()) {
@@ -286,16 +331,17 @@ class WorkspaceRepository(
                 firestoreRepository.saveWithdrawal(wsId, saved, activeUid)
             }
         }
-        return id
+        return safeWithId
     }
 
     suspend fun updateWithdrawal(withdrawal: WithdrawalEntity) {
-        withdrawalDao.updateWithdrawal(withdrawal.copy(isSynced = true))
+        val updated = withdrawal.copy(isSynced = true)
+        withdrawalDao.updateWithdrawal(updated)
 
         val wsId = currentWorkspace.value?.workspaceId
         if (!wsId.isNullOrBlank()) {
             scope.launch {
-                firestoreRepository.saveWithdrawal(wsId, withdrawal, activeUid)
+                firestoreRepository.saveWithdrawal(wsId, updated, activeUid)
             }
         }
     }
@@ -356,16 +402,20 @@ class WorkspaceRepository(
             custId = existing.id
             customerEntity = updated
         } else {
+            val safeCustId = IdGenerator.generateId()
             val newCust = CustomerEntity(
+                id = safeCustId,
                 name = name.trim(),
                 phone = cleanPhone,
                 location = cleanLocation,
                 totalBilled = 0.0,
                 totalPaid = 0.0,
-                balanceDue = 0.0
+                balanceDue = 0.0,
+                isSynced = true
             )
-            custId = customerDao.insertCustomer(newCust)
-            customerEntity = newCust.copy(id = custId)
+            customerDao.insertCustomer(newCust)
+            custId = safeCustId
+            customerEntity = newCust
         }
 
         val wsId = currentWorkspace.value?.workspaceId
@@ -390,7 +440,9 @@ class WorkspaceRepository(
         val noteDesc = if (note.isNotBlank()) "Note: $note" else ""
         val combinedNotes = listOf(methodDesc, noteDesc).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { "Direct Payment Received" }
 
+        val safeEntryId = IdGenerator.generateId()
         val paymentEntry = JobEntryEntity(
+            id = safeEntryId,
             customerId = customer.id,
             customerName = customer.name,
             customerPhone = customer.phone,
@@ -411,13 +463,13 @@ class WorkspaceRepository(
             isSynced = true
         )
 
-        val entryId = jobEntryDao.insertJob(paymentEntry)
+        jobEntryDao.insertJob(paymentEntry)
         recalculateCustomerStats(customer.id)
 
         val wsId = currentWorkspace.value?.workspaceId
         if (!wsId.isNullOrBlank()) {
             scope.launch {
-                firestoreRepository.saveJobEntry(wsId, paymentEntry.copy(id = entryId), activeUid)
+                firestoreRepository.saveJobEntry(wsId, paymentEntry, activeUid)
                 val updatedCust = customerDao.getCustomerById(customer.id)
                 if (updatedCust != null) {
                     firestoreRepository.saveCustomer(wsId, updatedCust, activeUid)
@@ -425,7 +477,7 @@ class WorkspaceRepository(
             }
         }
 
-        return entryId
+        return safeEntryId
     }
 
     private suspend fun recalculateCustomerStats(customerId: Long) {
@@ -446,8 +498,9 @@ class WorkspaceRepository(
     }
 
     suspend fun addTractor(tractor: TractorEntity): Long {
-        val id = tractorDao.insertTractor(tractor)
-        val saved = tractor.copy(id = id)
+        val safeTracId = if (tractor.id > 0) tractor.id else IdGenerator.generateId()
+        val saved = tractor.copy(id = safeTracId)
+        tractorDao.insertTractor(saved)
 
         val wsId = currentWorkspace.value?.workspaceId
         if (!wsId.isNullOrBlank()) {
@@ -455,7 +508,7 @@ class WorkspaceRepository(
                 firestoreRepository.saveTractor(wsId, saved, activeUid)
             }
         }
-        return id
+        return safeTracId
     }
 
     suspend fun updateTractor(tractor: TractorEntity) {
@@ -481,8 +534,9 @@ class WorkspaceRepository(
     }
 
     suspend fun addPartner(partner: PartnerEntity): Long {
-        val id = partnerDao.insertPartner(partner)
-        val saved = partner.copy(id = id)
+        val safePartId = if (partner.id > 0) partner.id else IdGenerator.generateId()
+        val saved = partner.copy(id = safePartId)
+        partnerDao.insertPartner(saved)
 
         val wsId = currentWorkspace.value?.workspaceId
         if (!wsId.isNullOrBlank()) {
@@ -490,7 +544,7 @@ class WorkspaceRepository(
                 firestoreRepository.savePartner(wsId, saved, activeUid)
             }
         }
-        return id
+        return safePartId
     }
 
     suspend fun updatePartner(partner: PartnerEntity) {
@@ -518,8 +572,10 @@ class WorkspaceRepository(
     suspend fun updateSettings(settings: AppSettingsEntity) {
         appSettingsDao.insertOrUpdateSettings(settings)
 
+        // Only push to cloud if settings have been loaded/initialized from cloud
+        val syncState = _settingsSyncState.value
         val wsId = currentWorkspace.value?.workspaceId
-        if (!wsId.isNullOrBlank()) {
+        if (!wsId.isNullOrBlank() && (syncState is SettingsSyncState.LoadedFromCloud || syncState is SettingsSyncState.CreatedInCloud)) {
             scope.launch {
                 firestoreRepository.saveSettings(wsId, settings, activeUid)
             }

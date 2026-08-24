@@ -75,8 +75,13 @@ enum class AuthMethod {
 fun LoginScreen(
     partners: List<PartnerEntity> = emptyList(),
     onLoginSuccess: (phone: String, otp: String) -> Unit,
+    onGoogleSignInRequested: (() -> Unit)? = null,
+    onSendOtpRequested: ((phoneNumber: String, onSuccess: () -> Unit) -> Unit)? = null,
+    onVerifyOtpRequested: ((otpCode: String) -> Unit)? = null,
+    onQuickPartnerSelected: ((PartnerEntity) -> Unit)? = null,
     onGmailLoginRequested: ((email: String) -> Unit)? = null,
     isLoggingIn: Boolean = false,
+    errorMessage: String? = null,
     initialAuthMethod: AuthMethod = AuthMethod.PHONE
 ) {
     var selectedMethod by remember { mutableStateOf(initialAuthMethod) }
@@ -179,6 +184,23 @@ fun LoginScreen(
                         fontSize = if (responsive.isSmallPhone) 11.sp else 12.sp,
                         lineHeight = if (responsive.isSmallPhone) 15.sp else 17.sp,
                         color = AppTheme.colors.textPrimary
+                    )
+                }
+            }
+
+            if (!errorMessage.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = AlertDueRed.copy(alpha = 0.1f)),
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(AlertDueRed.copy(alpha = 0.3f))),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = errorMessage,
+                        fontSize = 12.sp,
+                        color = AlertDueRed,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                     )
                 }
             }
@@ -370,7 +392,11 @@ fun LoginScreen(
                             Button(
                                 onClick = {
                                     focusManager.clearFocus()
-                                    onLoginSuccess(phoneNumber, otpCode)
+                                    if (onVerifyOtpRequested != null) {
+                                        onVerifyOtpRequested(otpCode.trim())
+                                    } else {
+                                        onLoginSuccess(phoneNumber, otpCode)
+                                    }
                                 },
                                 enabled = !isLoggingIn && phoneNumber.isNotBlank() && otpCode.isNotBlank(),
                                 modifier = Modifier
@@ -399,9 +425,15 @@ fun LoginScreen(
                             Button(
                                 onClick = {
                                     focusManager.clearFocus()
-                                    isOtpSent = true
+                                    if (onSendOtpRequested != null) {
+                                        onSendOtpRequested(phoneNumber.trim()) {
+                                            isOtpSent = true
+                                        }
+                                    } else {
+                                        isOtpSent = true
+                                    }
                                 },
-                                enabled = phoneNumber.isNotBlank(),
+                                enabled = !isLoggingIn && phoneNumber.isNotBlank(),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(if (responsive.isSmallPhone) 46.dp else 50.dp)
@@ -409,18 +441,26 @@ fun LoginScreen(
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = DeepSageGreen)
                             ) {
-                                Text(
-                                    text = "Continue / Get Login OTP",
-                                    fontSize = if (responsive.isSmallPhone) 14.sp else 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
+                                if (isLoggingIn) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        modifier = Modifier.size(22.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text(
+                                        text = "Continue / Get Login OTP",
+                                        fontSize = if (responsive.isSmallPhone) 14.sp else 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
                             }
                         }
                     }
                 }
             } else {
-                // --- GMAIL AUTHENTICATION VIEW ---
+                // --- GMAIL / GOOGLE AUTHENTICATION VIEW ---
                 Card(
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = AppTheme.colors.cardBg),
@@ -432,7 +472,7 @@ fun LoginScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = "Gmail Address",
+                            text = "Google Sign-In",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = ForestGreenHeader
@@ -441,7 +481,7 @@ fun LoginScreen(
                         OutlinedTextField(
                             value = gmailAddress,
                             onValueChange = { gmailAddress = it },
-                            label = { Text("Gmail Address", fontSize = if (responsive.isSmallPhone) 12.sp else 14.sp) },
+                            label = { Text("Gmail Address (Optional)", fontSize = if (responsive.isSmallPhone) 12.sp else 14.sp) },
                             placeholder = { Text("name@gmail.com") },
                             leadingIcon = {
                                 Icon(Icons.Default.Email, contentDescription = null, tint = DeepSageGreen)
@@ -454,7 +494,9 @@ fun LoginScreen(
                             keyboardActions = KeyboardActions(
                                 onDone = {
                                     focusManager.clearFocus()
-                                    if (isEmailValid) {
+                                    if (onGoogleSignInRequested != null) {
+                                        onGoogleSignInRequested()
+                                    } else if (isEmailValid) {
                                         onGmailLoginRequested?.invoke(gmailAddress.trim())
                                     }
                                 }
@@ -475,9 +517,13 @@ fun LoginScreen(
                         Button(
                             onClick = {
                                 focusManager.clearFocus()
-                                onGmailLoginRequested?.invoke(gmailAddress.trim())
+                                if (onGoogleSignInRequested != null) {
+                                    onGoogleSignInRequested()
+                                } else {
+                                    onGmailLoginRequested?.invoke(gmailAddress.trim())
+                                }
                             },
-                            enabled = isEmailValid,
+                            enabled = !isLoggingIn,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(if (responsive.isSmallPhone) 46.dp else 50.dp)
@@ -485,12 +531,20 @@ fun LoginScreen(
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = DeepSageGreen)
                         ) {
-                            Text(
-                                text = "Continue with Gmail",
-                                fontSize = if (responsive.isSmallPhone) 14.sp else 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
+                            if (isLoggingIn) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    modifier = Modifier.size(22.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    text = "Continue with Google",
+                                    fontSize = if (responsive.isSmallPhone) 14.sp else 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
                         }
                     }
                 }
@@ -520,7 +574,11 @@ fun LoginScreen(
                                 phoneNumber = partner.phone
                                 otpCode = "8890"
                                 selectedMethod = AuthMethod.PHONE
-                                onLoginSuccess(partner.phone, "8890")
+                                if (onQuickPartnerSelected != null) {
+                                    onQuickPartnerSelected(partner)
+                                } else {
+                                    onLoginSuccess(partner.phone, "8890")
+                                }
                             },
                             modifier = Modifier
                                 .weight(1f)

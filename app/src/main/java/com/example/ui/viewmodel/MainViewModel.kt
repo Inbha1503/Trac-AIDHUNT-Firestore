@@ -1,6 +1,8 @@
 package com.example.ui.viewmodel
 
+import android.app.Activity
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.database.AppDatabase
@@ -11,8 +13,13 @@ import com.example.data.entity.JobEntryEntity
 import com.example.data.entity.PartnerEntity
 import com.example.data.entity.TractorEntity
 import com.example.data.entity.WithdrawalEntity
+import com.example.data.firebase.AuthState
+import com.example.data.firebase.UserProfile
+import com.example.data.firebase.Workspace
 import com.example.data.network.NetworkMonitor
+import com.example.data.repository.AuthRepository
 import com.example.data.repository.TractorRepository
+import com.example.data.repository.WorkspaceRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -50,7 +57,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = AppDatabase.getInstance(application)
     private val repository = TractorRepository(database)
+    private val authRepository = AuthRepository.getInstance(application)
+    private val workspaceRepository = WorkspaceRepository.getInstance(application, database)
     private val networkMonitor = NetworkMonitor(application)
+
+    // Workspace & Authentication State
+    val currentWorkspace: StateFlow<Workspace?> = workspaceRepository.currentWorkspace
+    val isWorkspaceInitialized: StateFlow<Boolean> = workspaceRepository.isInitialized
+    val authState: StateFlow<AuthState> = authRepository.authState
+    val currentUserProfile: StateFlow<UserProfile?> = authRepository.currentUserProfile
+    val currentUid: String?
+        get() = authRepository.currentUid
+
+    // Phone verification ID tracker for OTP flow
+    private val _phoneVerificationId = MutableStateFlow<String?>(null)
+    val phoneVerificationId: StateFlow<String?> = _phoneVerificationId.asStateFlow()
 
     // Sync State
     private val _isSyncing = MutableStateFlow(false)
@@ -168,6 +189,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     init {
+        // Start listening to Firebase Auth state
+        authRepository.startListening()
+
+        viewModelScope.launch {
+            authState.collect { state ->
+                when (state) {
+                    is AuthState.Authenticated -> {
+                        val current = settings.value
+                        val prof = state.profile
+                        // Initialize Firestore Workspace & real-time snapshot listeners
+                        workspaceRepository.initializeForUser(prof)
+
+                        repository.updateSettings(
+                            current.copy(
+                                isLoggedIn = true,
+                                activePartnerName = prof.displayName ?: current.activePartnerName.ifBlank { "Partner" },
+                                activePartnerPhone = prof.phoneNumber ?: current.activePartnerPhone,
+                                profilePhotoUri = prof.photoUrl ?: current.profilePhotoUri
+                            )
+                        )
+                    }
+                    is AuthState.Unauthenticated -> {
+                        // Stop real-time listeners on logout
+                        workspaceRepository.stopWorkspaceListeners()
+                        val current = settings.value
+                        if (current.isLoggedIn) {
+                            repository.updateSettings(current.copy(isLoggedIn = false))
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+        }
+
         // Automatically push to cloud whenever network comes back online
         viewModelScope.launch {
             isEffectiveOnline.collect { online ->
@@ -224,19 +279,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         viewModelScope.launch {
             try {
-                val isCurrentlyOnline = isEffectiveOnline.value
-                val jobToSave = job.copy(isSynced = false)
-                val expenseToSave = linkedExpense?.copy(isSynced = false)
-                repository.saveJobEntry(jobToSave, expenseToSave)
+                workspaceRepository.saveJobEntry(job, linkedExpense)
 
                 // Clear the draft only upon successful persistence
                 clearNewEntryDraft()
 
-                if (isCurrentlyOnline) {
-                    pushUnsyncedToCloud()
-                } else {
-                    _syncMessage.value = "Job saved offline to Room SQLite. Will push to Cloud when online."
-                }
+                _syncMessage.value = "Saved successfully and synced to Cloud Workspace"
                 onSuccess()
             } catch (e: Exception) {
                 // If saving fails, do not clear the draft!
@@ -247,82 +295,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteJob(job: JobEntryEntity) {
         viewModelScope.launch {
-            repository.deleteJob(job)
-            if (isEffectiveOnline.value) {
-                pushUnsyncedToCloud()
-            }
+            workspaceRepository.deleteJob(job)
         }
     }
 
     fun addExpense(expense: ExpenseEntity, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
-            val isCurrentlyOnline = isEffectiveOnline.value
-            val expToSave = expense.copy(isSynced = false)
-            repository.addExpense(expToSave)
-
-            if (isCurrentlyOnline) {
-                pushUnsyncedToCloud()
-            } else {
-                _syncMessage.value = "Expense saved offline to Room SQLite."
-            }
+            workspaceRepository.addExpense(expense)
+            _syncMessage.value = "Expense saved and synced with Cloud"
             onSuccess()
         }
     }
 
     fun updateExpense(expense: ExpenseEntity, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
-            val isCurrentlyOnline = isEffectiveOnline.value
-            val expToSave = expense.copy(isSynced = false)
-            repository.updateExpense(expToSave)
-
-            if (isCurrentlyOnline) {
-                pushUnsyncedToCloud()
-            }
+            workspaceRepository.updateExpense(expense)
             onSuccess()
         }
     }
 
     fun deleteExpense(expense: ExpenseEntity) {
         viewModelScope.launch {
-            repository.deleteExpense(expense)
-            if (isEffectiveOnline.value) {
-                pushUnsyncedToCloud()
-            }
+            workspaceRepository.deleteExpense(expense)
         }
     }
 
     fun addWithdrawal(withdrawal: WithdrawalEntity, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
-            val isCurrentlyOnline = isEffectiveOnline.value
-            val withToSave = withdrawal.copy(isSynced = false)
-            repository.addWithdrawal(withToSave)
-
-            if (isCurrentlyOnline) {
-                pushUnsyncedToCloud()
-            } else {
-                _syncMessage.value = "Withdrawal saved offline to Room SQLite."
-            }
+            workspaceRepository.addWithdrawal(withdrawal)
+            _syncMessage.value = "Withdrawal saved and synced with Cloud"
             onSuccess()
         }
     }
 
     fun deleteWithdrawal(withdrawal: WithdrawalEntity) {
         viewModelScope.launch {
-            repository.deleteWithdrawal(withdrawal)
-            if (isEffectiveOnline.value) {
-                pushUnsyncedToCloud()
-            }
+            workspaceRepository.deleteWithdrawal(withdrawal)
         }
     }
 
     fun updateCustomer(customer: CustomerEntity, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
-            val isCurrentlyOnline = isEffectiveOnline.value
-            repository.updateCustomer(customer.copy(isSynced = false))
-
-            if (isCurrentlyOnline) {
-                pushUnsyncedToCloud()
-            }
+            workspaceRepository.updateCustomer(customer)
             onSuccess()
         }
     }
@@ -336,90 +350,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         onSuccess: () -> Unit = {}
     ) {
         viewModelScope.launch {
-            val isCurrentlyOnline = isEffectiveOnline.value
-            repository.recordCustomerPayment(
-                customer = customer.copy(isSynced = false),
+            workspaceRepository.recordCustomerPayment(
+                customer = customer,
                 amount = amount,
                 dateTimestamp = dateTimestamp,
                 paymentMethod = paymentMethod,
                 note = note,
                 operatorName = settings.value.activePartnerName
             )
-
-            if (isCurrentlyOnline) {
-                pushUnsyncedToCloud()
-            } else {
-                _syncMessage.value = "Payment recorded offline to Room SQLite."
-            }
+            _syncMessage.value = "Payment recorded and synced with Cloud"
             onSuccess()
         }
     }
 
     fun deleteCustomer(customer: CustomerEntity, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
-            repository.deleteCustomer(customer)
-            if (isEffectiveOnline.value) {
-                pushUnsyncedToCloud()
-            }
+            workspaceRepository.deleteCustomer(customer)
             onSuccess()
         }
     }
 
     fun addTractor(tractor: TractorEntity, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
-            repository.addTractor(tractor)
-            if (isEffectiveOnline.value) {
-                pushUnsyncedToCloud()
-            }
+            workspaceRepository.addTractor(tractor)
             onSuccess()
         }
     }
 
     fun updateTractor(tractor: TractorEntity, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
-            repository.updateTractor(tractor)
-            if (isEffectiveOnline.value) {
-                pushUnsyncedToCloud()
-            }
+            workspaceRepository.updateTractor(tractor)
             onSuccess()
         }
     }
 
     fun deleteTractor(tractor: TractorEntity) {
         viewModelScope.launch {
-            repository.deleteTractor(tractor)
-            if (isEffectiveOnline.value) {
-                pushUnsyncedToCloud()
-            }
+            workspaceRepository.deleteTractor(tractor)
         }
     }
 
     fun addPartner(partner: PartnerEntity, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
-            repository.addPartner(partner)
-            if (isEffectiveOnline.value) {
-                pushUnsyncedToCloud()
-            }
+            workspaceRepository.addPartner(partner)
             onSuccess()
         }
     }
 
     fun updatePartner(partner: PartnerEntity, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
-            repository.updatePartner(partner)
-            if (isEffectiveOnline.value) {
-                pushUnsyncedToCloud()
-            }
+            workspaceRepository.updatePartner(partner)
             onSuccess()
         }
     }
 
     fun deletePartner(partner: PartnerEntity) {
         viewModelScope.launch {
-            repository.deletePartner(partner)
-            if (isEffectiveOnline.value) {
-                pushUnsyncedToCloud()
-            }
+            workspaceRepository.deletePartner(partner)
         }
     }
 
@@ -429,18 +416,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 partnerName = "${partner.name} (${partner.role})",
                 partnerPhone = partner.phone
             )
-            if (isEffectiveOnline.value) {
-                pushUnsyncedToCloud()
-            }
         }
     }
 
     fun updateSettings(updated: AppSettingsEntity, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
-            repository.updateSettings(updated)
-            if (isEffectiveOnline.value) {
-                pushUnsyncedToCloud()
-            }
+            workspaceRepository.updateSettings(updated)
             onSuccess()
         }
     }
@@ -471,10 +452,83 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getJobsForCustomer(customerId: Long) = repository.getJobsForCustomer(customerId)
 
+    // --- Firebase Authentication ---
+
+    fun signInWithGoogle(
+        context: Context,
+        webClientId: String? = null,
+        onSuccess: (UserProfile) -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            val result = authRepository.signInWithGoogle(context, webClientId)
+            _isSyncing.value = false
+            result.onSuccess { profile ->
+                onSuccess(profile)
+            }.onFailure { e ->
+                onError(e.message ?: "Google Sign-In failed")
+            }
+        }
+    }
+
+    fun sendPhoneOtp(
+        activity: Activity,
+        phone: String,
+        onCodeSent: () -> Unit = {},
+        onError: (String) -> Unit = {},
+        onAutoVerified: (UserProfile) -> Unit = {}
+    ) {
+        _isSyncing.value = true
+        authRepository.sendPhoneOtp(
+            activity = activity,
+            phoneNumber = phone,
+            onCodeSent = { verificationId ->
+                _phoneVerificationId.value = verificationId
+                _isSyncing.value = false
+                onCodeSent()
+            },
+            onError = { msg ->
+                _isSyncing.value = false
+                onError(msg)
+            },
+            onAutoVerified = { profile ->
+                _isSyncing.value = false
+                onAutoVerified(profile)
+            }
+        )
+    }
+
+    fun verifyPhoneOtp(
+        otpCode: String,
+        onSuccess: (UserProfile) -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        val verificationId = _phoneVerificationId.value
+        if (verificationId == null) {
+            onError("Verification ID missing. Please request a new OTP.")
+            return
+        }
+
+        viewModelScope.launch {
+            _isSyncing.value = true
+            val result = authRepository.verifyPhoneOtp(verificationId, otpCode)
+            _isSyncing.value = false
+            result.onSuccess { profile ->
+                onSuccess(profile)
+            }.onFailure { e ->
+                onError(e.message ?: "Invalid OTP Code")
+            }
+        }
+    }
+
+    /**
+     * Fallback / Direct Login for offline testing or pre-configured local partner
+     */
     fun loginWithOtp(phone: String, otp: String, onComplete: () -> Unit) {
         viewModelScope.launch {
             _isSyncing.value = true
-            delay(800)
+            delay(400)
             val current = settings.value
             repository.updateSettings(
                 current.copy(
@@ -487,8 +541,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun logout(onComplete: () -> Unit) {
+    fun loginWithPartner(partner: PartnerEntity, onComplete: () -> Unit) {
         viewModelScope.launch {
+            _isSyncing.value = true
+            val current = settings.value
+            repository.updateSettings(
+                current.copy(
+                    isLoggedIn = true,
+                    activePartnerName = "${partner.name} (${partner.role})",
+                    activePartnerPhone = partner.phone,
+                    profilePhotoUri = partner.photoUri ?: current.profilePhotoUri
+                )
+            )
+            _isSyncing.value = false
+            onComplete()
+        }
+    }
+
+    fun logout(onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                authRepository.signOut()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
             val current = settings.value
             repository.updateSettings(current.copy(isLoggedIn = false))
             onComplete()

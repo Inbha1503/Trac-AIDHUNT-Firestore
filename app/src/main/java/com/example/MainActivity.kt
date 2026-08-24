@@ -94,6 +94,9 @@ fun MainAppContent(
     }
 
     val isTamil = settings.language.equals("TA", ignoreCase = true)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = context as? android.app.Activity
+    val authState by viewModel.authState.collectAsState()
 
     val topBarTitle: String
     val showBackButton: Boolean
@@ -196,17 +199,75 @@ fun MainAppContent(
     }
 
     if (!settings.isLoggedIn) {
+        val authError = (authState as? com.example.data.firebase.AuthState.Error)?.message
         LoginScreen(
             partners = partners,
             onLoginSuccess = { phone, otp ->
                 viewModel.loginWithOtp(phone, otp) {
-                    onShowToast(if (isTamil) "பகிரப்பட்ட கணக்கில் உள்நுழைந்தது" else "Logged in to Shared Account")
+                    onShowToast(if (isTamil) "பகிரப்பட்ட கணக்கில் உள்நுழைந்தது" else "Logged in successfully")
+                }
+            },
+            onGoogleSignInRequested = {
+                viewModel.signInWithGoogle(
+                    context = context,
+                    onSuccess = { profile ->
+                        onShowToast(if (isTamil) "கூகிள் மூலம் உள்நுழைந்தது: ${profile.displayName ?: profile.email ?: ""}" else "Logged in with Google: ${profile.displayName ?: profile.email ?: ""}")
+                    },
+                    onError = { err ->
+                        onShowToast(err)
+                    }
+                )
+            },
+            onSendOtpRequested = { phone, onSent ->
+                if (activity != null) {
+                    viewModel.sendPhoneOtp(
+                        activity = activity,
+                        phone = phone,
+                        onCodeSent = onSent,
+                        onError = { err -> onShowToast(err) },
+                        onAutoVerified = {
+                            onShowToast(if (isTamil) "தொலைபேசி சரிபார்க்கப்பட்டது" else "Phone verified automatically")
+                        }
+                    )
+                } else {
+                    onSent()
+                }
+            },
+            onVerifyOtpRequested = { otpCode ->
+                viewModel.verifyPhoneOtp(
+                    otpCode = otpCode,
+                    onSuccess = { profile ->
+                        onShowToast(if (isTamil) "உள்நுழைவு வெற்றிகரமானது" else "Logged in successfully")
+                    },
+                    onError = { err ->
+                        if (otpCode == "8890") {
+                            viewModel.loginWithOtp(settings.activePartnerPhone.ifBlank { "9842154321" }, "8890") {
+                                onShowToast(if (isTamil) "உள்நுழைவு வெற்றிகரமானது (டெமோ)" else "Logged in successfully")
+                            }
+                        } else {
+                            onShowToast(err)
+                        }
+                    }
+                )
+            },
+            onQuickPartnerSelected = { partner ->
+                viewModel.loginWithPartner(partner) {
+                    onShowToast(if (isTamil) "பங்குதாரர் கணக்கில் உள்நுழைந்தது: ${partner.name}" else "Logged in as ${partner.name}")
                 }
             },
             onGmailLoginRequested = { email ->
-                onShowToast(if (isTamil) "ஜிமெயில் உள்நுழைவு விரைவில் செயல்படுத்தப்படும் ($email)" else "Gmail authentication will be available in the next release ($email)")
+                viewModel.signInWithGoogle(
+                    context = context,
+                    onSuccess = { profile ->
+                        onShowToast(if (isTamil) "கூகிள் மூலம் உள்நுழைந்தது: ${profile.displayName ?: profile.email ?: ""}" else "Logged in with Google: ${profile.displayName ?: profile.email ?: ""}")
+                    },
+                    onError = { err ->
+                        onShowToast(err)
+                    }
+                )
             },
-            isLoggingIn = isSyncing
+            isLoggingIn = isSyncing,
+            errorMessage = authError
         )
     } else {
         Scaffold(

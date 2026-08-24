@@ -31,18 +31,6 @@ interface PartnerDao {
 
     @Query("SELECT COUNT(*) FROM partners")
     suspend fun getCount(): Int
-
-    @Query("SELECT * FROM partners WHERE uuid = :uuid LIMIT 1")
-    suspend fun getPartnerByUuid(uuid: String): PartnerEntity?
-
-    @Query("SELECT * FROM partners WHERE isSynced = 0 OR syncStatus != 'SYNCED'")
-    suspend fun getUnsyncedPartners(): List<PartnerEntity>
-
-    @Query("UPDATE partners SET isSynced = 1, syncStatus = 'SYNCED' WHERE id IN (:ids)")
-    suspend fun markPartnersSynced(ids: List<Long>)
-
-    @Query("DELETE FROM partners")
-    suspend fun deleteAllPartners()
 }
 
 @Dao
@@ -61,18 +49,6 @@ interface TractorDao {
 
     @Query("SELECT COUNT(*) FROM tractors")
     suspend fun getCount(): Int
-
-    @Query("SELECT * FROM tractors WHERE uuid = :uuid LIMIT 1")
-    suspend fun getTractorByUuid(uuid: String): TractorEntity?
-
-    @Query("SELECT * FROM tractors WHERE isSynced = 0 OR syncStatus != 'SYNCED'")
-    suspend fun getUnsyncedTractors(): List<TractorEntity>
-
-    @Query("UPDATE tractors SET isSynced = 1, syncStatus = 'SYNCED' WHERE id IN (:ids)")
-    suspend fun markTractorsSynced(ids: List<Long>)
-
-    @Query("DELETE FROM tractors")
-    suspend fun deleteAllTractors()
 }
 
 @Dao
@@ -98,23 +74,14 @@ interface CustomerDao {
     @Delete
     suspend fun deleteCustomer(customer: CustomerEntity)
 
-    @Query("SELECT * FROM customers WHERE isSynced = 0 OR syncStatus != 'SYNCED'")
+    @Query("SELECT * FROM customers WHERE isSynced = 0")
     suspend fun getUnsyncedCustomers(): List<CustomerEntity>
 
-    @Query("UPDATE customers SET isSynced = 1, syncStatus = 'SYNCED' WHERE id IN (:ids)")
+    @Query("UPDATE customers SET isSynced = 1 WHERE id IN (:ids)")
     suspend fun markCustomersSynced(ids: List<Long>)
 
-    @Query("UPDATE customers SET syncStatus = :status WHERE id = :id")
-    suspend fun updateSyncStatus(id: Long, status: String)
-
-    @Query("SELECT * FROM customers WHERE uuid = :uuid LIMIT 1")
-    suspend fun getCustomerByUuid(uuid: String): CustomerEntity?
-
-    @Query("SELECT COUNT(*) FROM customers WHERE isSynced = 0 OR syncStatus != 'SYNCED'")
+    @Query("SELECT COUNT(*) FROM customers WHERE isSynced = 0")
     fun getUnsyncedCount(): Flow<Int>
-
-    @Query("DELETE FROM customers")
-    suspend fun deleteAllCustomers()
 }
 
 @Dao
@@ -143,23 +110,14 @@ interface JobEntryDao {
     @Query("SELECT SUM(pendingAmount) FROM job_entries")
     fun getTotalPending(): Flow<Double?>
 
-    @Query("SELECT * FROM job_entries WHERE isSynced = 0 OR syncStatus != 'SYNCED'")
+    @Query("SELECT * FROM job_entries WHERE isSynced = 0")
     suspend fun getUnsyncedJobs(): List<JobEntryEntity>
 
-    @Query("UPDATE job_entries SET isSynced = 1, syncStatus = 'SYNCED' WHERE id IN (:ids)")
+    @Query("UPDATE job_entries SET isSynced = 1 WHERE id IN (:ids)")
     suspend fun markJobsSynced(ids: List<Long>)
 
-    @Query("UPDATE job_entries SET syncStatus = :status WHERE id = :id")
-    suspend fun updateSyncStatus(id: Long, status: String)
-
-    @Query("SELECT * FROM job_entries WHERE uuid = :uuid LIMIT 1")
-    suspend fun getJobByUuid(uuid: String): JobEntryEntity?
-
-    @Query("SELECT COUNT(*) FROM job_entries WHERE isSynced = 0 OR syncStatus != 'SYNCED'")
+    @Query("SELECT COUNT(*) FROM job_entries WHERE isSynced = 0")
     fun getUnsyncedCount(): Flow<Int>
-
-    @Query("DELETE FROM job_entries")
-    suspend fun deleteAllJobs()
 }
 
 @Dao
@@ -179,23 +137,14 @@ interface ExpenseDao {
     @Query("SELECT SUM(amount) FROM expenses")
     fun getTotalExpenses(): Flow<Double?>
 
-    @Query("SELECT * FROM expenses WHERE isSynced = 0 OR syncStatus != 'SYNCED'")
+    @Query("SELECT * FROM expenses WHERE isSynced = 0")
     suspend fun getUnsyncedExpenses(): List<ExpenseEntity>
 
-    @Query("UPDATE expenses SET isSynced = 1, syncStatus = 'SYNCED' WHERE id IN (:ids)")
+    @Query("UPDATE expenses SET isSynced = 1 WHERE id IN (:ids)")
     suspend fun markExpensesSynced(ids: List<Long>)
 
-    @Query("UPDATE expenses SET syncStatus = :status WHERE id = :id")
-    suspend fun updateSyncStatus(id: Long, status: String)
-
-    @Query("SELECT * FROM expenses WHERE uuid = :uuid LIMIT 1")
-    suspend fun getExpenseByUuid(uuid: String): ExpenseEntity?
-
-    @Query("SELECT COUNT(*) FROM expenses WHERE isSynced = 0 OR syncStatus != 'SYNCED'")
+    @Query("SELECT COUNT(*) FROM expenses WHERE isSynced = 0")
     fun getUnsyncedCount(): Flow<Int>
-
-    @Query("DELETE FROM expenses")
-    suspend fun deleteAllExpenses()
 }
 
 @Dao
@@ -215,23 +164,14 @@ interface WithdrawalDao {
     @Query("SELECT SUM(amount) FROM withdrawals")
     fun getTotalWithdrawn(): Flow<Double?>
 
-    @Query("SELECT * FROM withdrawals WHERE isSynced = 0 OR syncStatus != 'SYNCED'")
+    @Query("SELECT * FROM withdrawals WHERE isSynced = 0")
     suspend fun getUnsyncedWithdrawals(): List<WithdrawalEntity>
 
-    @Query("UPDATE withdrawals SET isSynced = 1, syncStatus = 'SYNCED' WHERE id IN (:ids)")
+    @Query("UPDATE withdrawals SET isSynced = 1 WHERE id IN (:ids)")
     suspend fun markWithdrawalsSynced(ids: List<Long>)
 
-    @Query("UPDATE withdrawals SET syncStatus = :status WHERE id = :id")
-    suspend fun updateSyncStatus(id: Long, status: String)
-
-    @Query("SELECT * FROM withdrawals WHERE uuid = :uuid LIMIT 1")
-    suspend fun getWithdrawalByUuid(uuid: String): WithdrawalEntity?
-
-    @Query("SELECT COUNT(*) FROM withdrawals WHERE isSynced = 0 OR syncStatus != 'SYNCED'")
+    @Query("SELECT COUNT(*) FROM withdrawals WHERE isSynced = 0")
     fun getUnsyncedCount(): Flow<Int>
-
-    @Query("DELETE FROM withdrawals")
-    suspend fun deleteAllWithdrawals()
 }
 
 @Dao

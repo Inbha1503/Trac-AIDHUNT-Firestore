@@ -239,30 +239,13 @@ class TractorRepository(private val database: AppDatabase) {
         jobs + exp + wth + cust
     }
 
-    suspend fun pushUnsyncedToCloud(isOnline: Boolean, syncManager: com.example.data.sync.FirestoreSyncManager? = null): com.example.data.sync.SyncResult {
+    suspend fun pushUnsyncedToCloud(isOnline: Boolean): SyncResult {
         if (!isOnline) {
-            return com.example.data.sync.SyncResult(
+            return SyncResult(
                 isSuccess = false,
                 syncedItemsCount = 0,
                 message = "Device offline. Stored safely in local Room SQLite database."
             )
-        }
-
-        if (syncManager != null) {
-            val success = syncManager.synchronize(isOnline = true)
-            return if (success) {
-                com.example.data.sync.SyncResult(
-                    isSuccess = true,
-                    syncedItemsCount = 0,
-                    message = "Cloud Firestore sync completed across all partner devices."
-                )
-            } else {
-                com.example.data.sync.SyncResult(
-                    isSuccess = false,
-                    syncedItemsCount = 0,
-                    message = "Cloud sync temporary failure. Records preserved offline in SQLite."
-                )
-            }
         }
 
         val unsyncedJobs = jobEntryDao.getUnsyncedJobs()
@@ -273,11 +256,12 @@ class TractorRepository(private val database: AppDatabase) {
         val totalCount = unsyncedJobs.size + unsyncedExpenses.size + unsyncedWithdrawals.size + unsyncedCustomers.size
 
         if (totalCount == 0) {
+            // Update last sync timestamp
             val current = getSettings()
             appSettingsDao.insertOrUpdateSettings(
                 current.copy(lastSyncTime = System.currentTimeMillis())
             )
-            return com.example.data.sync.SyncResult(
+            return SyncResult(
                 isSuccess = true,
                 syncedItemsCount = 0,
                 message = "All records are already in sync with Cloud."
@@ -303,7 +287,7 @@ class TractorRepository(private val database: AppDatabase) {
             current.copy(lastSyncTime = System.currentTimeMillis())
         )
 
-        return com.example.data.sync.SyncResult(
+        return SyncResult(
             isSuccess = true,
             syncedItemsCount = totalCount,
             message = "Pushed $totalCount offline records to Cloud successfully!"
@@ -317,3 +301,9 @@ class TractorRepository(private val database: AppDatabase) {
         )
     }
 }
+
+data class SyncResult(
+    val isSuccess: Boolean,
+    val syncedItemsCount: Int,
+    val message: String
+)

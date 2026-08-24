@@ -72,10 +72,6 @@ class NetworkMonitor(context: Context) {
         this.onNetworkAvailableListener = listener
     }
 
-    fun isCurrentlyConnected(): Boolean {
-        return checkInitialConnectivity()
-    }
-
     private fun checkInitialConnectivity(): Boolean {
         return try {
             val activeNetwork = connectivityManager?.activeNetwork ?: return false

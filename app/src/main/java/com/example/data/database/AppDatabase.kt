@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.dao.AppSettingsDao
 import com.example.data.dao.CustomerDao
@@ -34,7 +33,7 @@ import kotlinx.coroutines.launch
         WithdrawalEntity::class,
         AppSettingsEntity::class
     ],
-    version = 6,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -51,90 +50,13 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
-        val MIGRATION_4_5 = object : Migration(4, 5) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                // 1. Partners
-                db.execSQL("ALTER TABLE partners ADD COLUMN uuid TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE partners ADD COLUMN businessId TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE partners ADD COLUMN createdBy TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE partners ADD COLUMN deviceId TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE partners ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
-                db.execSQL("ALTER TABLE partners ADD COLUMN isSynced INTEGER NOT NULL DEFAULT 1")
-                db.execSQL("ALTER TABLE partners ADD COLUMN syncStatus TEXT NOT NULL DEFAULT 'SYNCED'")
-                db.execSQL("ALTER TABLE partners ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
-
-                // 2. Tractors
-                db.execSQL("ALTER TABLE tractors ADD COLUMN uuid TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE tractors ADD COLUMN businessId TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE tractors ADD COLUMN createdBy TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE tractors ADD COLUMN deviceId TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE tractors ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
-                db.execSQL("ALTER TABLE tractors ADD COLUMN isSynced INTEGER NOT NULL DEFAULT 1")
-                db.execSQL("ALTER TABLE tractors ADD COLUMN syncStatus TEXT NOT NULL DEFAULT 'SYNCED'")
-                db.execSQL("ALTER TABLE tractors ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
-
-                // 3. Customers
-                db.execSQL("ALTER TABLE customers ADD COLUMN uuid TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE customers ADD COLUMN businessId TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE customers ADD COLUMN createdBy TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE customers ADD COLUMN deviceId TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE customers ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
-                db.execSQL("ALTER TABLE customers ADD COLUMN syncStatus TEXT NOT NULL DEFAULT 'SYNCED'")
-
-                // 4. Job Entries
-                db.execSQL("ALTER TABLE job_entries ADD COLUMN uuid TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE job_entries ADD COLUMN businessId TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE job_entries ADD COLUMN customerUuid TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE job_entries ADD COLUMN tractorUuid TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE job_entries ADD COLUMN createdBy TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE job_entries ADD COLUMN deviceId TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE job_entries ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
-                db.execSQL("ALTER TABLE job_entries ADD COLUMN syncStatus TEXT NOT NULL DEFAULT 'SYNCED'")
-                db.execSQL("ALTER TABLE job_entries ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
-
-                // 5. Expenses
-                db.execSQL("ALTER TABLE expenses ADD COLUMN uuid TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE expenses ADD COLUMN businessId TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE expenses ADD COLUMN tractorUuid TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE expenses ADD COLUMN relatedJobUuid TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE expenses ADD COLUMN createdBy TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE expenses ADD COLUMN deviceId TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE expenses ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
-                db.execSQL("ALTER TABLE expenses ADD COLUMN syncStatus TEXT NOT NULL DEFAULT 'SYNCED'")
-                db.execSQL("ALTER TABLE expenses ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
-
-                // 6. Withdrawals
-                db.execSQL("ALTER TABLE withdrawals ADD COLUMN uuid TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE withdrawals ADD COLUMN businessId TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE withdrawals ADD COLUMN partnerUuid TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE withdrawals ADD COLUMN createdBy TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE withdrawals ADD COLUMN deviceId TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE withdrawals ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
-                db.execSQL("ALTER TABLE withdrawals ADD COLUMN syncStatus TEXT NOT NULL DEFAULT 'SYNCED'")
-                db.execSQL("ALTER TABLE withdrawals ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
-
-                // 7. App Settings
-                db.execSQL("ALTER TABLE app_settings ADD COLUMN businessId TEXT NOT NULL DEFAULT 'AIDHUNT-TRAC-SHARED-01'")
-                db.execSQL("ALTER TABLE app_settings ADD COLUMN deviceId TEXT NOT NULL DEFAULT ''")
-            }
-        }
-
-        val MIGRATION_5_6 = object : Migration(5, 6) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                // Force re-login through Firebase Auth on all existing devices
-                // so that FirebaseAuth.currentUser is set before Firestore sync runs
-                db.execSQL("UPDATE app_settings SET isLoggedIn = 0 WHERE id = 1")
-            }
-        }
-
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "aidhunt_trac_v5.db"
-                ).addMigrations(MIGRATION_4_5, MIGRATION_5_6)
-                .fallbackToDestructiveMigration(false)
+                    "aidhunt_trac_v4.db"
+                ).fallbackToDestructiveMigration(true)
                 .addCallback(DatabaseCallback(context.applicationContext))
                 .build()
                 INSTANCE = instance
@@ -173,7 +95,7 @@ abstract class AppDatabase : RoomDatabase() {
                     defaultHourlyRate = 1100.0,
                     language = "EN",
                     sharedAccountId = "AIDHUNT-TRAC-SHARED-01",
-                    isLoggedIn = false,
+                    isLoggedIn = true,
                     activePartnerName = "Muthu (Owner)",
                     activePartnerPhone = "+91 98421 54321",
                     lastSyncTime = System.currentTimeMillis()

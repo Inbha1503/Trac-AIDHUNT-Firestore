@@ -1,6 +1,5 @@
 package com.example
 
-import android.app.Activity
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -41,7 +40,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                MainAppContent(activity = this, viewModel = viewModel, onShowToast = { msg ->
+                MainAppContent(viewModel = viewModel, onShowToast = { msg ->
                     Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
                 })
             }
@@ -51,7 +50,6 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MainAppContent(
-    activity: Activity,
     viewModel: MainViewModel,
     onShowToast: (String) -> Unit
 ) {
@@ -200,83 +198,13 @@ fun MainAppContent(
     if (!settings.isLoggedIn) {
         LoginScreen(
             partners = partners,
-            onGoogleSignIn = { isCreatingAccount, bName, oName, onError ->
-                viewModel.signInWithGoogle(activity, bName, oName, isCreatingAccount) { success, error ->
-                    if (success) {
-                        onShowToast(if (isTamil) "Google மூலம் வெற்றிகரமாக உள்நுழைந்தது!" else "Signed in with Google successfully!")
-                    } else if (error != null) {
-                        onError(error)
-                        onShowToast(error)
-                    }
+            onLoginSuccess = { phone, otp ->
+                viewModel.loginWithOtp(phone, otp) {
+                    onShowToast(if (isTamil) "பகிரப்பட்ட கணக்கில் உள்நுழைந்தது" else "Logged in to Shared Account")
                 }
             },
-            onGoogleSignInDirect = { email, name, isCreatingAccount, bName, oName, onError ->
-                viewModel.signInWithGoogleDirect(email, name, bName, oName, isCreatingAccount) { success, error ->
-                    if (success) {
-                        onShowToast(if (isTamil) "Google மூலம் வெற்றிகரமாக உள்நுழைந்தது!" else "Signed in with Google successfully!")
-                    } else if (error != null) {
-                        onError(error)
-                        onShowToast(error)
-                    }
-                }
-            },
-            onSendOtp = { phone, onCodeSent, onError ->
-                viewModel.sendVerificationCode(phone, activity, onCodeSent, onError)
-            },
-            onVerifyOtp = { phone, verificationId, otp, onError ->
-                viewModel.verifyPhoneOtp(verificationId, otp, phone) { success, error ->
-                    if (success) {
-                        onShowToast(if (isTamil) "பகிரப்பட்ட கணக்கில் உள்நுழைந்தது" else "Logged in to Shared Account")
-                    } else {
-                        val msg = error ?: "Login failed"
-                        onError(msg)
-                        onShowToast(msg)
-                    }
-                }
-            },
-            onEmailLogin = { email, pass, onError ->
-                viewModel.loginWithEmail(email, pass) { success, error ->
-                    if (success) {
-                        onShowToast(if (isTamil) "கணக்கில் உள்நுழைந்தது" else "Signed in successfully!")
-                    } else {
-                        val msg = error ?: "Email login failed"
-                        onError(msg)
-                        onShowToast(msg)
-                    }
-                }
-            },
-            onCreateAccountEmail = { email, pass, bName, oName, phone, onError ->
-                viewModel.createAccountWithEmail(email, pass, bName, oName, phone) { success, error ->
-                    if (success) {
-                        onShowToast(if (isTamil) "புதிய கணக்கு உருவாக்கப்பட்டது!" else "New Business Account created successfully!")
-                    } else {
-                        val msg = error ?: "Account creation failed"
-                        onError(msg)
-                        onShowToast(msg)
-                    }
-                }
-            },
-            onCreateAccountPhone = { verificationId, otp, phone, bName, oName, onError ->
-                viewModel.createAccountWithPhone(verificationId, otp, phone, bName, oName) { success, error ->
-                    if (success) {
-                        onShowToast(if (isTamil) "புதிய கணக்கு உருவாக்கப்பட்டது!" else "New Business Account created successfully!")
-                    } else {
-                        val msg = error ?: "Phone registration failed"
-                        onError(msg)
-                        onShowToast(msg)
-                    }
-                }
-            },
-            onDemoLogin = { partner, onError ->
-                viewModel.loginWithDemoAccount(partner) { success, error ->
-                    if (success) {
-                        onShowToast(if (isTamil) "${partner.name} ஆக உள்நுழைந்தது (Demo)" else "Logged in as ${partner.name} (Demo)")
-                    } else {
-                        val msg = error ?: "Demo login failed"
-                        onError(msg)
-                        onShowToast(msg)
-                    }
-                }
+            onGmailLoginRequested = { email ->
+                onShowToast(if (isTamil) "ஜிமெயில் உள்நுழைவு விரைவில் செயல்படுத்தப்படும் ($email)" else "Gmail authentication will be available in the next release ($email)")
             },
             isLoggingIn = isSyncing
         )

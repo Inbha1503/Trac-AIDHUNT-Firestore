@@ -6,6 +6,7 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "partners")
 data class PartnerEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val workspaceId: String = "",
     val name: String,
     val phone: String,
     val role: String = "Partner", // "Owner", "Partner"
@@ -18,6 +19,7 @@ data class PartnerEntity(
 @Entity(tableName = "tractors")
 data class TractorEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val workspaceId: String = "",
     val label: String, // e.g. "Mahindra 575 DI"
     val chassisNo: String, // e.g. "MH-575-TN45-9871"
     val modelYear: String = "",
@@ -29,6 +31,7 @@ data class TractorEntity(
 @Entity(tableName = "customers")
 data class CustomerEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val workspaceId: String = "",
     val name: String,
     val phone: String,
     val location: String = "",
@@ -43,6 +46,7 @@ data class CustomerEntity(
 @Entity(tableName = "job_entries")
 data class JobEntryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val workspaceId: String = "",
     val customerId: Long = 0,
     val customerName: String,
     val customerPhone: String = "",
@@ -67,6 +71,7 @@ data class JobEntryEntity(
 @Entity(tableName = "expenses")
 data class ExpenseEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val workspaceId: String = "",
     val expenseType: String, // "Diesel", "Petrol", "Repair", "Puncture", "Oil Change", "Driver Bata", "Spare Parts", "Other"
     val amount: Double,
     val tractorId: Long = 0,
@@ -83,6 +88,7 @@ data class ExpenseEntity(
 @Entity(tableName = "withdrawals")
 data class WithdrawalEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val workspaceId: String = "",
     val partnerId: Long = 0,
     val partnerName: String,
     val amount: Double,
@@ -95,7 +101,7 @@ data class WithdrawalEntity(
 
 @Entity(tableName = "app_settings")
 data class AppSettingsEntity(
-    @PrimaryKey val id: Int = 1,
+    @PrimaryKey val workspaceId: String = "",
     val businessName: String = "AIDHUNT Agri & Tractor Services",
     val ownerName: String = "Muthu & Partners",
     val businessPhone: String = "+91 98421 54321",

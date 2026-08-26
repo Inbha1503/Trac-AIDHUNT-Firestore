@@ -84,6 +84,7 @@ class FirebaseAuthService(
         authStateListener = FirebaseAuth.AuthStateListener { firebaseAuth ->
             val user = firebaseAuth.currentUser
             if (user != null) {
+                Log.d("TRAC_AUTH", "authenticated uid=${user.uid}")
                 scope.launch {
                     try {
                         val profile = fetchOrCreateUserProfile(user)
@@ -140,6 +141,7 @@ class FirebaseAuthService(
                 val user = authResult.user ?: throw IllegalStateException("Firebase user is null after sign in")
 
                 val profile = fetchOrCreateUserProfile(user)
+                Log.d("TRAC_AUTH", "authenticated uid=${user.uid}")
                 _currentUserProfile.value = profile
                 _authState.value = AuthState.Authenticated(profile)
                 Result.success(profile)
@@ -184,6 +186,7 @@ class FirebaseAuthService(
                         val authResult = currentAuth.signInWithCredential(credential).awaitTask()
                         val user = authResult.user ?: throw IllegalStateException("User null after verification")
                         val profile = fetchOrCreateUserProfile(user)
+                        Log.d("TRAC_AUTH", "authenticated uid=${user.uid}")
                         _currentUserProfile.value = profile
                         _authState.value = AuthState.Authenticated(profile)
                         onAutoVerified(profile)
@@ -230,6 +233,7 @@ class FirebaseAuthService(
             val user = authResult.user ?: throw IllegalStateException("User is null after OTP verification")
 
             val profile = fetchOrCreateUserProfile(user)
+            Log.d("TRAC_AUTH", "authenticated uid=${user.uid}")
             _currentUserProfile.value = profile
             _authState.value = AuthState.Authenticated(profile)
             Result.success(profile)
@@ -252,8 +256,8 @@ class FirebaseAuthService(
 
     /**
      * Checks if `users/{uid}` exists in Firestore.
-     * If not, creates basic profile document.
-     * If exists, updates `updatedAt` without duplicating or overwriting `createdAt`.
+     * If not, creates basic profile document without nulling defaultWorkspaceId.
+     * If exists, updates fields safely using SetOptions.merge().
      */
     private suspend fun fetchOrCreateUserProfile(user: FirebaseUser): UserProfile {
         val uid = user.uid
@@ -276,7 +280,6 @@ class FirebaseAuthService(
             if (snapshot.exists()) {
                 val data = snapshot.data ?: emptyMap()
                 val existing = UserProfile.fromMap(data)
-                // Update updatedAt
                 val updated = existing.copy(
                     updatedAt = System.currentTimeMillis(),
                     displayName = existing.displayName ?: user.displayName,
@@ -284,20 +287,30 @@ class FirebaseAuthService(
                     phoneNumber = existing.phoneNumber ?: user.phoneNumber,
                     photoUrl = existing.photoUrl ?: user.photoUrl?.toString()
                 )
-                userDocRef.set(updated.toMap(), SetOptions.merge()).awaitTask()
+                val updateMap = mutableMapOf<String, Any?>(
+                    "uid" to uid,
+                    "updatedAt" to System.currentTimeMillis()
+                )
+                if (user.displayName != null) updateMap["displayName"] = user.displayName
+                if (user.email != null) updateMap["email"] = user.email
+                if (user.phoneNumber != null) updateMap["phoneNumber"] = user.phoneNumber
+                if (user.photoUrl != null) updateMap["photoUrl"] = user.photoUrl.toString()
+                userDocRef.set(updateMap, SetOptions.merge()).awaitTask()
                 updated
             } else {
-                // First-time user creation
+                val canonicalWsId = "ws_${uid.replace(Regex("[^a-zA-Z0-9]"), "").take(16).ifBlank { "main" }}"
                 val newProfile = UserProfile(
                     uid = uid,
                     displayName = user.displayName ?: "Partner",
                     email = user.email,
                     phoneNumber = user.phoneNumber,
                     photoUrl = user.photoUrl?.toString(),
+                    defaultWorkspaceId = canonicalWsId,
+                    workspaces = listOf(canonicalWsId),
                     createdAt = System.currentTimeMillis(),
                     updatedAt = System.currentTimeMillis()
                 )
-                userDocRef.set(newProfile.toMap()).awaitTask()
+                userDocRef.set(newProfile.toMap(), SetOptions.merge()).awaitTask()
                 newProfile
             }
         } catch (e: Exception) {

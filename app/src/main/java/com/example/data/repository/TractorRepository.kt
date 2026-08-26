@@ -284,11 +284,6 @@ class TractorRepository(private val database: AppDatabase) {
         val totalCount = unsyncedJobs.size + unsyncedExpenses.size + unsyncedWithdrawals.size + unsyncedCustomers.size
 
         if (totalCount == 0) {
-            // Update last sync timestamp
-            val current = getSettings()
-            appSettingsDao.insertOrUpdateSettings(
-                current.copy(lastSyncTime = System.currentTimeMillis())
-            )
             return SyncResult(
                 isSuccess = true,
                 syncedItemsCount = 0,
@@ -296,29 +291,10 @@ class TractorRepository(private val database: AppDatabase) {
             )
         }
 
-        // Mark all in SQLite as synced
-        if (unsyncedJobs.isNotEmpty()) {
-            jobEntryDao.markJobsSynced(unsyncedJobs.map { it.id })
-        }
-        if (unsyncedExpenses.isNotEmpty()) {
-            expenseDao.markExpensesSynced(unsyncedExpenses.map { it.id })
-        }
-        if (unsyncedWithdrawals.isNotEmpty()) {
-            withdrawalDao.markWithdrawalsSynced(unsyncedWithdrawals.map { it.id })
-        }
-        if (unsyncedCustomers.isNotEmpty()) {
-            customerDao.markCustomersSynced(unsyncedCustomers.map { it.id })
-        }
-
-        val current = getSettings()
-        appSettingsDao.insertOrUpdateSettings(
-            current.copy(lastSyncTime = System.currentTimeMillis())
-        )
-
         return SyncResult(
-            isSuccess = true,
-            syncedItemsCount = totalCount,
-            message = "Pushed $totalCount offline records to Cloud successfully!"
+            isSuccess = false,
+            syncedItemsCount = 0,
+            message = "$totalCount local records pending Cloud upload."
         )
     }
 

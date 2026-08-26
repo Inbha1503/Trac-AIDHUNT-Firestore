@@ -77,6 +77,7 @@ data class WorkspaceMember(
 
 fun JobEntryEntity.toFirestoreMap(createdByUid: String? = null): Map<String, Any?> = mapOf(
     "id" to id,
+    "workspaceId" to workspaceId,
     "customerId" to customerId,
     "customerName" to customerName,
     "customerPhone" to customerPhone,
@@ -99,10 +100,12 @@ fun JobEntryEntity.toFirestoreMap(createdByUid: String? = null): Map<String, Any
     "updatedAt" to System.currentTimeMillis()
 )
 
-fun jobEntryFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0): JobEntryEntity {
+fun jobEntryFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0, fallbackWorkspaceId: String = ""): JobEntryEntity {
     val id = (map["id"] as? Number)?.toLong() ?: fallbackId
+    val wsId = map["workspaceId"] as? String ?: fallbackWorkspaceId
     return JobEntryEntity(
         id = id,
+        workspaceId = wsId,
         customerId = (map["customerId"] as? Number)?.toLong() ?: 0L,
         customerName = map["customerName"] as? String ?: "",
         customerPhone = map["customerPhone"] as? String ?: "",
@@ -127,6 +130,7 @@ fun jobEntryFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0): JobE
 
 fun ExpenseEntity.toFirestoreMap(createdByUid: String? = null): Map<String, Any?> = mapOf(
     "id" to id,
+    "workspaceId" to workspaceId,
     "expenseType" to expenseType,
     "amount" to amount,
     "tractorId" to tractorId,
@@ -141,10 +145,12 @@ fun ExpenseEntity.toFirestoreMap(createdByUid: String? = null): Map<String, Any?
     "updatedAt" to System.currentTimeMillis()
 )
 
-fun expenseFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0): ExpenseEntity {
+fun expenseFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0, fallbackWorkspaceId: String = ""): ExpenseEntity {
     val id = (map["id"] as? Number)?.toLong() ?: fallbackId
+    val wsId = map["workspaceId"] as? String ?: fallbackWorkspaceId
     return ExpenseEntity(
         id = id,
+        workspaceId = wsId,
         expenseType = map["expenseType"] as? String ?: "Diesel",
         amount = (map["amount"] as? Number)?.toDouble() ?: 0.0,
         tractorId = (map["tractorId"] as? Number)?.toLong() ?: 0L,
@@ -161,6 +167,7 @@ fun expenseFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0): Expen
 
 fun CustomerEntity.toFirestoreMap(createdByUid: String? = null): Map<String, Any?> = mapOf(
     "id" to id,
+    "workspaceId" to workspaceId,
     "name" to name,
     "phone" to phone,
     "location" to location,
@@ -172,10 +179,12 @@ fun CustomerEntity.toFirestoreMap(createdByUid: String? = null): Map<String, Any
     "updatedAt" to updatedAt
 )
 
-fun customerFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0): CustomerEntity {
+fun customerFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0, fallbackWorkspaceId: String = ""): CustomerEntity {
     val id = (map["id"] as? Number)?.toLong() ?: fallbackId
+    val wsId = map["workspaceId"] as? String ?: fallbackWorkspaceId
     return CustomerEntity(
         id = id,
+        workspaceId = wsId,
         name = map["name"] as? String ?: "",
         phone = map["phone"] as? String ?: "",
         location = map["location"] as? String ?: "",
@@ -190,6 +199,7 @@ fun customerFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0): Cust
 
 fun TractorEntity.toFirestoreMap(createdByUid: String? = null): Map<String, Any?> = mapOf(
     "id" to id,
+    "workspaceId" to workspaceId,
     "label" to label,
     "chassisNo" to chassisNo,
     "modelYear" to modelYear,
@@ -200,10 +210,12 @@ fun TractorEntity.toFirestoreMap(createdByUid: String? = null): Map<String, Any?
     "updatedAt" to System.currentTimeMillis()
 )
 
-fun tractorFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0): TractorEntity {
+fun tractorFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0, fallbackWorkspaceId: String = ""): TractorEntity {
     val id = (map["id"] as? Number)?.toLong() ?: fallbackId
+    val wsId = map["workspaceId"] as? String ?: fallbackWorkspaceId
     return TractorEntity(
         id = id,
+        workspaceId = wsId,
         label = map["label"] as? String ?: "Tractor",
         chassisNo = map["chassisNo"] as? String ?: "",
         modelYear = map["modelYear"] as? String ?: "",
@@ -215,6 +227,7 @@ fun tractorFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0): Tract
 
 fun PartnerEntity.toFirestoreMap(createdByUid: String? = null): Map<String, Any?> = mapOf(
     "id" to id,
+    "workspaceId" to workspaceId,
     "name" to name,
     "phone" to phone,
     "role" to role,
@@ -226,10 +239,12 @@ fun PartnerEntity.toFirestoreMap(createdByUid: String? = null): Map<String, Any?
     "updatedAt" to System.currentTimeMillis()
 )
 
-fun partnerFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0): PartnerEntity {
+fun partnerFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0, fallbackWorkspaceId: String = ""): PartnerEntity {
     val id = (map["id"] as? Number)?.toLong() ?: fallbackId
+    val wsId = map["workspaceId"] as? String ?: fallbackWorkspaceId
     return PartnerEntity(
         id = id,
+        workspaceId = wsId,
         name = map["name"] as? String ?: "Partner",
         phone = map["phone"] as? String ?: "",
         role = map["role"] as? String ?: "Partner",
@@ -242,6 +257,7 @@ fun partnerFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0): Partn
 
 fun WithdrawalEntity.toFirestoreMap(createdByUid: String? = null): Map<String, Any?> = mapOf(
     "id" to id,
+    "workspaceId" to workspaceId,
     "partnerId" to partnerId,
     "partnerName" to partnerName,
     "amount" to amount,
@@ -253,10 +269,12 @@ fun WithdrawalEntity.toFirestoreMap(createdByUid: String? = null): Map<String, A
     "updatedAt" to System.currentTimeMillis()
 )
 
-fun withdrawalFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0): WithdrawalEntity {
+fun withdrawalFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0, fallbackWorkspaceId: String = ""): WithdrawalEntity {
     val id = (map["id"] as? Number)?.toLong() ?: fallbackId
+    val wsId = map["workspaceId"] as? String ?: fallbackWorkspaceId
     return WithdrawalEntity(
         id = id,
+        workspaceId = wsId,
         partnerId = (map["partnerId"] as? Number)?.toLong() ?: 0L,
         partnerName = map["partnerName"] as? String ?: "Partner",
         amount = (map["amount"] as? Number)?.toDouble() ?: 0.0,
@@ -269,6 +287,7 @@ fun withdrawalFromFirestoreMap(map: Map<String, Any?>, fallbackId: Long = 0): Wi
 }
 
 fun AppSettingsEntity.toFirestoreMap(updatedByUid: String? = null): Map<String, Any?> = mapOf(
+    "workspaceId" to workspaceId,
     "businessName" to businessName,
     "ownerName" to ownerName,
     "businessPhone" to businessPhone,
@@ -283,8 +302,10 @@ fun AppSettingsEntity.toFirestoreMap(updatedByUid: String? = null): Map<String, 
     "updatedAt" to System.currentTimeMillis()
 )
 
-fun appSettingsFromFirestoreMap(map: Map<String, Any?>, currentSettings: AppSettingsEntity): AppSettingsEntity {
+fun appSettingsFromFirestoreMap(map: Map<String, Any?>, currentSettings: AppSettingsEntity, fallbackWorkspaceId: String = ""): AppSettingsEntity {
+    val wsId = map["workspaceId"] as? String ?: fallbackWorkspaceId.ifBlank { currentSettings.workspaceId }
     return currentSettings.copy(
+        workspaceId = wsId,
         businessName = map["businessName"] as? String ?: currentSettings.businessName,
         ownerName = map["ownerName"] as? String ?: currentSettings.ownerName,
         businessPhone = map["businessPhone"] as? String ?: currentSettings.businessPhone,

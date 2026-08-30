@@ -46,14 +46,8 @@ class FirestoreRepository(
     private val _currentWorkspace = MutableStateFlow<Workspace?>(null)
     val currentWorkspace: StateFlow<Workspace?> = _currentWorkspace.asStateFlow()
 
-    // Real-time listener registrations
-    private var entriesListener: ListenerRegistration? = null
-    private var expensesListener: ListenerRegistration? = null
-    private var customersListener: ListenerRegistration? = null
-    private var tractorsListener: ListenerRegistration? = null
-    private var attendeesListener: ListenerRegistration? = null
-    private var withdrawalsListener: ListenerRegistration? = null
-    private var settingsListener: ListenerRegistration? = null
+    // Real-time listener registrations per workspace (workspaceId -> Map of listener registrations)
+    private val activeWorkspaceListeners = mutableMapOf<String, MutableList<ListenerRegistration>>()
 
     /**
      * Completes strict deterministic workspace bootstrap for an authenticated user.
@@ -120,7 +114,7 @@ class FirestoreRepository(
                 val workspaceName = if (!user.displayName.isNullOrBlank()) {
                     "${user.displayName}'s Tractor Services"
                 } else {
-                    "AIDHUNT Agri & Tractor Services"
+                    ""
                 }
                 workspace = Workspace(
                     workspaceId = workspaceId,
@@ -170,6 +164,9 @@ class FirestoreRepository(
             }
             Log.d("TRAC_FIRESTORE", "verified workspaces/$workspaceId/members/$uid exists")
 
+            // Ensure owner's collaboration group exists: collaborationGroups/{workspaceId}
+            ensureCollaborationGroup(workspaceId, uid)
+
             // 5. Persist and AWAIT: users/{uid}.defaultWorkspaceId = workspaceId
             currentOperation = "updating_users/$uid.defaultWorkspaceId=$workspaceId"
             Log.d("TRAC_FIRESTORE", "updating users/$uid.defaultWorkspaceId=$workspaceId")
@@ -210,6 +207,56 @@ class FirestoreRepository(
             val code = (e as? FirebaseFirestoreException)?.code?.name ?: "UNKNOWN"
             Log.e("TRAC_FIRESTORE", "FAILED operation=$currentOperation code=$code message=${e.message}", e)
             throw e
+        }
+    }
+
+    private suspend fun ensureCollaborationGroup(workspaceId: String, ownerUid: String) {
+        val firestore = db ?: return
+        try {
+            val groupRef = firestore.collection("collaborationGroups").document(workspaceId)
+            val groupSnap = groupRef.get().await()
+            val now = System.currentTimeMillis()
+            if (!groupSnap.exists()) {
+                val group = CollaborationGroup(
+                    groupId = workspaceId,
+                    ownerUid = ownerUid,
+                    ownerWorkspaceId = workspaceId,
+                    createdAt = now,
+                    updatedAt = now
+                )
+                groupRef.set(group.toMap(), SetOptions.merge()).await()
+            }
+
+            // Also ensure owner is registered as active member in the group
+            val ownerMemberRef = groupRef.collection("members").document(ownerUid)
+            val ownerMemberSnap = ownerMemberRef.get().await()
+            if (!ownerMemberSnap.exists()) {
+                val member = CollaborationGroupMember(
+                    uid = ownerUid,
+                    workspaceId = workspaceId,
+                    role = "owner",
+                    status = "active",
+                    joinedAt = now
+                )
+                ownerMemberRef.set(member.toMap(), SetOptions.merge()).await()
+            }
+
+            // Also ensure user's discovery index exists
+            val userGroupIndexRef = firestore.collection("userCollaborationGroups").document(ownerUid)
+                .collection("groups").document(workspaceId)
+            userGroupIndexRef.set(
+                UserCollaborationGroupIndex(
+                    groupId = workspaceId,
+                    ownerUid = ownerUid,
+                    ownerWorkspaceId = workspaceId,
+                    role = "owner",
+                    status = "active",
+                    joinedAt = now
+                ).toMap(),
+                SetOptions.merge()
+            ).await()
+        } catch (e: Exception) {
+            Log.w(TAG, "ensureCollaborationGroup deferred: ${e.message}")
         }
     }
 
@@ -260,8 +307,168 @@ class FirestoreRepository(
     }
 
     /**
-     * Registers real-time Firestore listeners on all subcollections for the workspace.
-     * When remote additions/edits/deletions happen, callbacks update local Room storage.
+     * Registers real-time Firestore listeners for a set of visible workspaces.
+     * Listens to entries, expenses, customers, tractors, attendees, withdrawals, settings for all given workspaces.
+     */
+    fun startRealtimeListenersForWorkspaces(
+        workspaceIds: Set<String>,
+        onJobsUpdated: (List<JobEntryEntity>, String) -> Unit,
+        onExpensesUpdated: (List<ExpenseEntity>, String) -> Unit,
+        onCustomersUpdated: (List<CustomerEntity>, String) -> Unit,
+        onTractorsUpdated: (List<TractorEntity>, String) -> Unit,
+        onPartnersUpdated: (List<PartnerEntity>, String) -> Unit,
+        onWithdrawalsUpdated: (List<WithdrawalEntity>, String) -> Unit,
+        onSettingsUpdated: (Map<String, Any?>, String) -> Unit
+    ) {
+        val firestore = db ?: return
+        val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""
+
+        // Stop listeners for workspaces no longer in the set
+        val existingWorkspaces = activeWorkspaceListeners.keys.toSet()
+        val toRemove = existingWorkspaces - workspaceIds
+        for (wsId in toRemove) {
+            activeWorkspaceListeners.remove(wsId)?.forEach { it.remove() }
+            Log.d("TRAC_FIRESTORE", "STOP_LISTEN workspace=$wsId")
+        }
+
+        // Add listeners for new workspaces
+        val toAdd = workspaceIds - existingWorkspaces
+        for (workspaceId in toAdd) {
+            if (workspaceId.isBlank()) continue
+            val wsRef = firestore.collection("workspaces").document(workspaceId)
+            val regList = mutableListOf<ListenerRegistration>()
+
+            Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=entries")
+            Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=expenses")
+            Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=customers")
+            Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=tractors")
+            Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=attendees")
+            Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=withdrawals")
+            Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=settings")
+
+            // 1. Entries Listener
+            val regEntries = wsRef.collection("entries")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.e(TAG, "Entries listener error: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=entries count=${snapshot.documents.size}")
+                        val jobs = snapshot.documents.mapNotNull { doc ->
+                            doc.data?.let { jobEntryFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
+                        }
+                        onJobsUpdated(jobs, workspaceId)
+                    }
+                }
+            regList.add(regEntries)
+
+            // 2. Expenses Listener
+            val regExpenses = wsRef.collection("expenses")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.e(TAG, "Expenses listener error: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=expenses count=${snapshot.documents.size}")
+                        val expenses = snapshot.documents.mapNotNull { doc ->
+                            doc.data?.let { expenseFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
+                        }
+                        onExpensesUpdated(expenses, workspaceId)
+                    }
+                }
+            regList.add(regExpenses)
+
+            // 3. Customers Listener
+            val regCustomers = wsRef.collection("customers")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.e(TAG, "Customers listener error: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=customers count=${snapshot.documents.size}")
+                        val customers = snapshot.documents.mapNotNull { doc ->
+                            doc.data?.let { customerFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
+                        }
+                        onCustomersUpdated(customers, workspaceId)
+                    }
+                }
+            regList.add(regCustomers)
+
+            // 4. Tractors Listener
+            val regTractors = wsRef.collection("tractors")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.e(TAG, "Tractors listener error: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=tractors count=${snapshot.documents.size}")
+                        val tractors = snapshot.documents.mapNotNull { doc ->
+                            doc.data?.let { tractorFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
+                        }
+                        onTractorsUpdated(tractors, workspaceId)
+                    }
+                }
+            regList.add(regTractors)
+
+            // 5. Attendees (Partners / Operators) Listener
+            val regAttendees = wsRef.collection("attendees")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.e(TAG, "Attendees listener error: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=attendees count=${snapshot.documents.size}")
+                        val partners = snapshot.documents.mapNotNull { doc ->
+                            doc.data?.let { partnerFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
+                        }
+                        onPartnersUpdated(partners, workspaceId)
+                    }
+                }
+            regList.add(regAttendees)
+
+            // 6. Withdrawals Listener
+            val regWithdrawals = wsRef.collection("withdrawals")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.e(TAG, "Withdrawals listener error: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=withdrawals count=${snapshot.documents.size}")
+                        val withdrawals = snapshot.documents.mapNotNull { doc ->
+                            doc.data?.let { withdrawalFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
+                        }
+                        onWithdrawalsUpdated(withdrawals, workspaceId)
+                    }
+                }
+            regList.add(regWithdrawals)
+
+            // 7. Settings Listener
+            val regSettings = wsRef.collection("settings").document("main")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.e(TAG, "Settings listener error: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null && snapshot.exists()) {
+                        Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=settings exists=true")
+                        snapshot.data?.let { onSettingsUpdated(it, workspaceId) }
+                    }
+                }
+            regList.add(regSettings)
+
+            activeWorkspaceListeners[workspaceId] = regList
+            Log.d(TAG, "All Firestore snapshot listeners started for workspace: $workspaceId")
+        }
+    }
+
+    /**
+     * Backward compatibility wrapper for single workspace listener.
      */
     fun startRealtimeListeners(
         workspaceId: String,
@@ -273,160 +480,26 @@ class FirestoreRepository(
         onWithdrawalsUpdated: (List<WithdrawalEntity>, String) -> Unit,
         onSettingsUpdated: (Map<String, Any?>, String) -> Unit
     ) {
-        val firestore = db ?: return
-        if (workspaceId.isBlank()) return
-
-        // Prevent duplicate listeners
-        stopRealtimeListeners()
-
-        val wsRef = firestore.collection("workspaces").document(workspaceId)
-        val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""
-
-        Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=entries")
-        Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=expenses")
-        Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=customers")
-        Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=tractors")
-        Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=attendees")
-        Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=withdrawals")
-        Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=settings")
-
-        // 1. Entries Listener
-        entriesListener = wsRef.collection("entries")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Entries listener error: ${error.message}")
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=entries count=${snapshot.documents.size}")
-                    val jobs = snapshot.documents.mapNotNull { doc ->
-                        doc.data?.let { jobEntryFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
-                    }
-                    onJobsUpdated(jobs, workspaceId)
-                }
-            }
-
-        // 2. Expenses Listener
-        expensesListener = wsRef.collection("expenses")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Expenses listener error: ${error.message}")
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=expenses count=${snapshot.documents.size}")
-                    val expenses = snapshot.documents.mapNotNull { doc ->
-                        doc.data?.let { expenseFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
-                    }
-                    onExpensesUpdated(expenses, workspaceId)
-                }
-            }
-
-        // 3. Customers Listener
-        customersListener = wsRef.collection("customers")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Customers listener error: ${error.message}")
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=customers count=${snapshot.documents.size}")
-                    val customers = snapshot.documents.mapNotNull { doc ->
-                        doc.data?.let { customerFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
-                    }
-                    onCustomersUpdated(customers, workspaceId)
-                }
-            }
-
-        // 4. Tractors Listener
-        tractorsListener = wsRef.collection("tractors")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Tractors listener error: ${error.message}")
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=tractors count=${snapshot.documents.size}")
-                    val tractors = snapshot.documents.mapNotNull { doc ->
-                        doc.data?.let { tractorFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
-                    }
-                    onTractorsUpdated(tractors, workspaceId)
-                }
-            }
-
-        // 5. Attendees (Partners / Operators) Listener
-        attendeesListener = wsRef.collection("attendees")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Attendees listener error: ${error.message}")
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=attendees count=${snapshot.documents.size}")
-                    val partners = snapshot.documents.mapNotNull { doc ->
-                        doc.data?.let { partnerFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
-                    }
-                    onPartnersUpdated(partners, workspaceId)
-                }
-            }
-
-        // 6. Withdrawals Listener
-        withdrawalsListener = wsRef.collection("withdrawals")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Withdrawals listener error: ${error.message}")
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=withdrawals count=${snapshot.documents.size}")
-                    val withdrawals = snapshot.documents.mapNotNull { doc ->
-                        doc.data?.let { withdrawalFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
-                    }
-                    onWithdrawalsUpdated(withdrawals, workspaceId)
-                }
-            }
-
-        // 7. Settings Listener
-        settingsListener = wsRef.collection("settings").document("main")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "Settings listener error: ${error.message}")
-                    return@addSnapshotListener
-                }
-                if (snapshot != null && snapshot.exists()) {
-                    Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=settings exists=true")
-                    snapshot.data?.let { onSettingsUpdated(it, workspaceId) }
-                }
-            }
-
-        Log.d(TAG, "All Firestore snapshot listeners started for workspace: $workspaceId")
+        startRealtimeListenersForWorkspaces(
+            workspaceIds = if (workspaceId.isBlank()) emptySet() else setOf(workspaceId),
+            onJobsUpdated = onJobsUpdated,
+            onExpensesUpdated = onExpensesUpdated,
+            onCustomersUpdated = onCustomersUpdated,
+            onTractorsUpdated = onTractorsUpdated,
+            onPartnersUpdated = onPartnersUpdated,
+            onWithdrawalsUpdated = onWithdrawalsUpdated,
+            onSettingsUpdated = onSettingsUpdated
+        )
     }
 
     /**
-     * Cleanly stops and unregisters all real-time listeners.
+     * Cleanly stops and unregisters all real-time listeners across all workspaces.
      */
     fun stopRealtimeListeners() {
-        entriesListener?.remove()
-        entriesListener = null
-
-        expensesListener?.remove()
-        expensesListener = null
-
-        customersListener?.remove()
-        customersListener = null
-
-        tractorsListener?.remove()
-        tractorsListener = null
-
-        attendeesListener?.remove()
-        attendeesListener = null
-
-        withdrawalsListener?.remove()
-        withdrawalsListener = null
-
-        settingsListener?.remove()
-        settingsListener = null
-
+        activeWorkspaceListeners.values.forEach { list ->
+            list.forEach { it.remove() }
+        }
+        activeWorkspaceListeners.clear()
         Log.d(TAG, "All Firestore snapshot listeners stopped.")
     }
 
@@ -701,21 +774,14 @@ class FirestoreRepository(
 
             Log.d(TAG, "Migrating local Room data to new workspace: $workspaceId")
 
-            // Only retrieve records for this workspaceId or unassigned seed records ("")
-            val tractors = database.tractorDao().getTractorsForWorkspace(workspaceId).firstOrNull()?.ifEmpty { null }
-                ?: database.tractorDao().getTractorsForWorkspace("").firstOrNull() ?: emptyList()
-            val customers = database.customerDao().getCustomersForWorkspace(workspaceId).firstOrNull()?.ifEmpty { null }
-                ?: database.customerDao().getCustomersForWorkspace("").firstOrNull() ?: emptyList()
-            val jobs = database.jobEntryDao().getJobsForWorkspace(workspaceId).firstOrNull()?.ifEmpty { null }
-                ?: database.jobEntryDao().getJobsForWorkspace("").firstOrNull() ?: emptyList()
-            val expenses = database.expenseDao().getExpensesForWorkspace(workspaceId).firstOrNull()?.ifEmpty { null }
-                ?: database.expenseDao().getExpensesForWorkspace("").firstOrNull() ?: emptyList()
-            val withdrawals = database.withdrawalDao().getWithdrawalsForWorkspace(workspaceId).firstOrNull()?.ifEmpty { null }
-                ?: database.withdrawalDao().getWithdrawalsForWorkspace("").firstOrNull() ?: emptyList()
-            val partners = database.partnerDao().getPartnersForWorkspace(workspaceId).firstOrNull()?.ifEmpty { null }
-                ?: database.partnerDao().getPartnersForWorkspace("").firstOrNull() ?: emptyList()
+            // Only retrieve records for this workspaceId
+            val tractors = database.tractorDao().getTractorsForWorkspace(workspaceId).firstOrNull() ?: emptyList()
+            val customers = database.customerDao().getCustomersForWorkspace(workspaceId).firstOrNull() ?: emptyList()
+            val jobs = database.jobEntryDao().getJobsForWorkspace(workspaceId).firstOrNull() ?: emptyList()
+            val expenses = database.expenseDao().getExpensesForWorkspace(workspaceId).firstOrNull() ?: emptyList()
+            val withdrawals = database.withdrawalDao().getWithdrawalsForWorkspace(workspaceId).firstOrNull() ?: emptyList()
+            val partners = database.partnerDao().getPartnersForWorkspace(workspaceId).firstOrNull() ?: emptyList()
             val currentSettings = database.appSettingsDao().getSettingsForWorkspaceOnce(workspaceId)
-                ?: database.appSettingsDao().getSettingsForWorkspaceOnce("")
 
             val batch = firestore.batch()
 
@@ -1007,6 +1073,155 @@ class FirestoreRepository(
         } catch (e: Exception) {
             Log.w("TRAC_PARTNER", "Error getting members for $workspaceId: ${e.message}")
             emptyList()
+        }
+    }
+
+    // --- Collaboration Groups & Multi-Workspace Discovery ---
+
+    suspend fun getUserCollaborationGroupIds(uid: String): List<String> {
+        val firestore = db ?: return emptyList()
+        if (uid.isBlank()) return emptyList()
+
+        return try {
+            val snap = firestore.collection("userCollaborationGroups").document(uid)
+                .collection("groups").get().await()
+            snap.documents.map { it.id }.filter { it.isNotBlank() }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error getting userCollaborationGroupIds for $uid: ${e.message}")
+            emptyList()
+        }
+    }
+
+    fun listenToUserCollaborationGroups(uid: String, onGroupsChanged: (List<String>) -> Unit): ListenerRegistration? {
+        val firestore = db ?: return null
+        if (uid.isBlank()) return null
+
+        return try {
+            firestore.collection("userCollaborationGroups").document(uid)
+                .collection("groups")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.w(TAG, "Error in userCollaborationGroups listener: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        val groupIds = snapshot.documents.map { it.id }.filter { it.isNotBlank() }
+                        onGroupsChanged(groupIds)
+                    }
+                }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to register userCollaborationGroups listener: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun getWorkspacesInCollaborationGroup(groupId: String): List<String> {
+        val firestore = db ?: return listOf(groupId)
+        if (groupId.isBlank()) return emptyList()
+
+        return try {
+            val snap = firestore.collection("collaborationGroups").document(groupId)
+                .collection("members").get().await()
+            val workspaceIds = snap.documents.mapNotNull { doc ->
+                doc.getString("workspaceId")?.ifBlank { null }
+            }.filter { it.isNotBlank() }
+            if (workspaceIds.isNotEmpty()) workspaceIds.distinct() else listOf(groupId)
+        } catch (e: Exception) {
+            Log.w(TAG, "Error getting workspaces for group $groupId: ${e.message}")
+            listOf(groupId)
+        }
+    }
+
+    fun listenToCollaborationGroupMembers(groupId: String, onWorkspacesChanged: (List<String>) -> Unit): ListenerRegistration? {
+        val firestore = db ?: return null
+        if (groupId.isBlank()) return null
+
+        return try {
+            firestore.collection("collaborationGroups").document(groupId)
+                .collection("members")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.w(TAG, "Error in collaboration group members listener for $groupId: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        val workspaceIds = snapshot.documents.mapNotNull { doc ->
+                            doc.getString("workspaceId")?.ifBlank { null }
+                        }.filter { it.isNotBlank() }
+                        onWorkspacesChanged(if (workspaceIds.isNotEmpty()) workspaceIds.distinct() else listOf(groupId))
+                    }
+                }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to register collaboration group members listener: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun addPartnerToCollaborationGroup(
+        ownerWorkspaceId: String,
+        ownerUid: String,
+        partnerUid: String,
+        partnerWorkspaceId: String
+    ): Result<Unit> {
+        val firestore = db ?: return Result.failure(IllegalStateException("Firestore is not initialized"))
+        val now = System.currentTimeMillis()
+
+        return try {
+            val batch = firestore.batch()
+
+            // 1. collaborationGroups/{ownerWorkspaceId}/members/{partnerUid}
+            val memberRef = firestore.collection("collaborationGroups").document(ownerWorkspaceId)
+                .collection("members").document(partnerUid)
+            val groupMember = CollaborationGroupMember(
+                uid = partnerUid,
+                workspaceId = partnerWorkspaceId,
+                role = "partner",
+                status = "active",
+                joinedAt = now
+            )
+            batch.set(memberRef, groupMember.toMap(), SetOptions.merge())
+
+            // 2. userCollaborationGroups/{partnerUid}/groups/{ownerWorkspaceId}
+            val partnerIndexRef = firestore.collection("userCollaborationGroups").document(partnerUid)
+                .collection("groups").document(ownerWorkspaceId)
+            val partnerIndex = UserCollaborationGroupIndex(
+                groupId = ownerWorkspaceId,
+                ownerUid = ownerUid,
+                ownerWorkspaceId = ownerWorkspaceId,
+                role = "partner",
+                status = "active",
+                joinedAt = now
+            )
+            batch.set(partnerIndexRef, partnerIndex.toMap(), SetOptions.merge())
+
+            batch.commit().await()
+            Log.d("TRAC_PARTNER", "COLLABORATION_GROUP_LINK ownerWs=$ownerWorkspaceId partnerUid=$partnerUid partnerWs=$partnerWorkspaceId SUCCESS")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("TRAC_PARTNER", "COLLABORATION_GROUP_LINK failed: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun removePartnerFromCollaborationGroup(
+        ownerWorkspaceId: String,
+        partnerUid: String
+    ) {
+        val firestore = db ?: return
+        try {
+            val batch = firestore.batch()
+            val memberRef = firestore.collection("collaborationGroups").document(ownerWorkspaceId)
+                .collection("members").document(partnerUid)
+            batch.delete(memberRef)
+
+            val partnerIndexRef = firestore.collection("userCollaborationGroups").document(partnerUid)
+                .collection("groups").document(ownerWorkspaceId)
+            batch.delete(partnerIndexRef)
+
+            batch.commit().await()
+            Log.d("TRAC_PARTNER", "COLLABORATION_GROUP_UNLINK ownerWs=$ownerWorkspaceId partnerUid=$partnerUid SUCCESS")
+        } catch (e: Exception) {
+            Log.w("TRAC_PARTNER", "Error unlinking from collaboration group: ${e.message}")
         }
     }
 

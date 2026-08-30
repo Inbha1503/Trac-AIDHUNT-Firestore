@@ -122,7 +122,7 @@ fun NewEntryScreen(
 
     // 2. Tractor Selection & Lock State
     val selectedTractor = if (draft.selectedTractor.isNotBlank()) draft.selectedTractor else {
-        if (settings.lockedTractorLabel.isNotBlank()) settings.lockedTractorLabel else (tractors.firstOrNull()?.label ?: "Mahindra 575 DI")
+        if (settings.lockedTractorLabel.isNotBlank()) settings.lockedTractorLabel else (tractors.firstOrNull()?.label ?: "")
     }
     val isTractorLocked = draft.isTractorLocked
     val selectedWorkType = draft.selectedWorkType

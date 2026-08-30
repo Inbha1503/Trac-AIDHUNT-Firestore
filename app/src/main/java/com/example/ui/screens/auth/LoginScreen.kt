@@ -326,7 +326,7 @@ fun LoginScreen(
                             value = phoneNumber,
                             onValueChange = { phoneNumber = it },
                             label = { Text("Registered Mobile Number", fontSize = if (responsive.isSmallPhone) 12.sp else 14.sp) },
-                            placeholder = { Text("9842154321") },
+                            placeholder = { Text("10-digit mobile number") },
                             leadingIcon = {
                                 Icon(Icons.Default.Phone, contentDescription = null, tint = DeepSageGreen)
                             },

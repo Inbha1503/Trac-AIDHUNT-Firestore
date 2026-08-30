@@ -67,7 +67,7 @@ data class NewEntryDraft(
 
     companion object {
         fun createDefault(
-            defaultTractor: String = "Mahindra 575 DI",
+            defaultTractor: String = "",
             lockedTractor: String = "",
             defaultHourlyRate: Double = 0.0
         ): NewEntryDraft {

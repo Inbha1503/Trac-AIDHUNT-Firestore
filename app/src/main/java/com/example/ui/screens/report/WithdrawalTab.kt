@@ -451,7 +451,7 @@ fun WithdrawalTab(
     if (showTakeAmountDialog) {
         TakeAmountDialog(
             partners = partners,
-            currentPartnerName = settings.activePartnerName.split(" ").firstOrNull() ?: "Muthu",
+            currentPartnerName = settings.activePartnerName.split(" ").firstOrNull() ?: "",
             onDismiss = { showTakeAmountDialog = false },
             onConfirm = { withdrawal ->
                 onAddWithdrawal(withdrawal)
@@ -620,7 +620,10 @@ fun TakeAmountDialog(
     onConfirm: (WithdrawalEntity) -> Unit
 ) {
     var selectedPartner by remember {
-        mutableStateOf(partners.find { it.name == currentPartnerName }?.name ?: partners.firstOrNull()?.name ?: "Muthu")
+        mutableStateOf(
+            if (currentPartnerName.isNotBlank()) currentPartnerName
+            else partners.firstOrNull()?.name ?: ""
+        )
     }
     var amountText by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("Personal Use") }

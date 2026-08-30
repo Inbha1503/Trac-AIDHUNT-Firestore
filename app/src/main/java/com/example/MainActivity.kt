@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import com.example.ui.components.AppBottomNav
 import com.example.ui.components.AppTopHeader
 import com.example.ui.screens.account.AccountScreen
+import com.example.ui.screens.auth.FirstAccountSetupDialog
 import com.example.ui.screens.auth.LoginScreen
 import com.example.ui.screens.entry.NewEntryScreen
 import com.example.ui.screens.home.HomeScreen
@@ -260,6 +261,30 @@ fun MainAppContent(
             errorMessage = authError
         )
     } else {
+        val needsInitialSetup = settings.isLoggedIn && (settings.ownerName.isBlank() || settings.businessName.isBlank())
+        if (needsInitialSetup) {
+            val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+            val prefilledName = currentUser?.displayName ?: settings.ownerName.ifBlank { settings.activePartnerName }
+            FirstAccountSetupDialog(
+                settings = settings,
+                initialDisplayName = prefilledName,
+                initialBusinessName = settings.businessName,
+                isTamil = isTamil,
+                onCompleteSetup = { dName, bName ->
+                    viewModel.completeInitialSetup(
+                        displayName = dName,
+                        businessName = bName,
+                        onSuccess = {
+                            onShowToast(if (isTamil) "சுயவிவரம் சேமிக்கப்பட்டது" else "Profile setup completed")
+                        },
+                        onError = { err ->
+                            onShowToast(err)
+                        }
+                    )
+                }
+            )
+        }
+
         Scaffold(
             topBar = {
                 AppTopHeader(

@@ -64,6 +64,14 @@ class WorkspaceRepository(
     private val _workspaceInitState = MutableStateFlow<WorkspaceInitState>(WorkspaceInitState.Uninitialized)
     val workspaceInitState: StateFlow<WorkspaceInitState> = _workspaceInitState.asStateFlow()
 
+    private val _personalWorkspaceId = MutableStateFlow<String?>(null)
+    val personalWorkspaceId: StateFlow<String?> = _personalWorkspaceId.asStateFlow()
+
+    fun getPersonalWorkspaceId(): String? = _personalWorkspaceId.value ?: _activeWorkspaceId.value
+
+    private val _visibleWorkspaceIds = MutableStateFlow<Set<String>>(emptySet())
+    val visibleWorkspaceIds: StateFlow<Set<String>> = _visibleWorkspaceIds.asStateFlow()
+
     private val _activeWorkspaceId = MutableStateFlow<String?>(null)
     val activeWorkspaceId: StateFlow<String?> = _activeWorkspaceId.asStateFlow()
 
@@ -77,14 +85,12 @@ class WorkspaceRepository(
     val workspaceMembers: StateFlow<List<WorkspaceMember>> = _workspaceMembers.asStateFlow()
 
     private var activeUid: String? = null
-    private var membershipListener: com.google.firebase.firestore.ListenerRegistration? = null
+    private var collaborationIndexListener: com.google.firebase.firestore.ListenerRegistration? = null
+    private val groupMembersListeners = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
 
     fun isCloudReady(): Boolean = _workspaceInitState.value is WorkspaceInitState.Ready
 
-    fun normalizePhoneNumber(phone: String): String {
-        val digits = phone.filter { it.isDigit() }
-        return if (phone.startsWith("+")) phone else "+91${digits.takeLast(10)}"
-    }
+    fun normalizePhoneNumber(phone: String): String = com.example.data.firebase.normalizePhoneNumber(phone)
 
     /**
      * Initializes workspace, awaits Firestore bootstrap & verification, attaches real-time snapshot listeners,
@@ -107,34 +113,38 @@ class WorkspaceRepository(
             // 1-7. Resolve/create, verify and write users/{uid}.defaultWorkspaceId on Firestore
             val workspace = firestoreRepository.bootstrapWorkspaceForUser(userProfile)
             val personalWsId = workspace.workspaceId
+            _personalWorkspaceId.value = personalWsId
 
-            // Check if there are shared workspace memberships
-            val sharedMemberships = firestoreRepository.getUserWorkspaceMemberships(uid)
-            val sharedWsIds = sharedMemberships.mapNotNull { it["workspaceId"] as? String }.filter { it.isNotBlank() }
-            Log.d("TRAC_WORKSPACE", "DISCOVER uid=$uid personal=$personalWsId shared=$sharedWsIds")
+            // Discover all visible workspace IDs from collaboration groups
+            val userGroups = firestoreRepository.getUserCollaborationGroupIds(uid)
+            val allGroupIds = (userGroups + personalWsId).distinct()
+            val discoveredWorkspaces = mutableSetOf<String>()
+            discoveredWorkspaces.add(personalWsId)
 
-            val wsId = if (sharedWsIds.isNotEmpty()) {
-                sharedWsIds.first()
-            } else {
-                personalWsId
+            for (groupId in allGroupIds) {
+                val groupWorkspaces = firestoreRepository.getWorkspacesInCollaborationGroup(groupId)
+                discoveredWorkspaces.addAll(groupWorkspaces)
             }
-            Log.d("TRAC_WORKSPACE", "ACTIVATE uid=$uid workspace=$wsId")
+
+            Log.d("TRAC_WORKSPACE", "DISCOVER uid=$uid personal=$personalWsId visible=$discoveredWorkspaces")
+            _visibleWorkspaceIds.value = discoveredWorkspaces
+            _activeWorkspaceId.value = personalWsId
 
             // Load or initialize cloud settings before enabling writes
-            val localSettings = appSettingsDao.getSettingsForWorkspaceOnce(wsId)
-                ?: AppSettingsEntity(workspaceId = wsId)
+            val localSettings = appSettingsDao.getSettingsForWorkspaceOnce(personalWsId)
+                ?: AppSettingsEntity(workspaceId = personalWsId)
             val resolvedSettings = firestoreRepository.fetchOrCreateWorkspaceSettings(
-                workspaceId = wsId,
+                workspaceId = personalWsId,
                 uid = uid,
                 localSettings = localSettings
             )
 
             // Merge user profile details with resolved settings
             val mergedSettings = resolvedSettings.copy(
-                workspaceId = wsId,
+                workspaceId = personalWsId,
                 isLoggedIn = true,
                 activePartnerName = userProfile.displayName?.ifBlank { null }
-                    ?: resolvedSettings.activePartnerName.ifBlank { "Partner" },
+                    ?: resolvedSettings.activePartnerName.ifBlank { "" },
                 activePartnerPhone = userProfile.phoneNumber?.ifBlank { null }
                     ?: resolvedSettings.activePartnerPhone,
                 profilePhotoUri = userProfile.photoUrl?.ifBlank { null }
@@ -145,37 +155,24 @@ class WorkspaceRepository(
             _settingsSyncState.value = SettingsSyncState.LoadedFromCloud(mergedSettings)
 
             // Safe migration on first login if personal workspace has no remote records yet
-            if (wsId == personalWsId) {
-                firestoreRepository.migrateLocalDataIfRequired(personalWsId, uid, database)
-            }
+            firestoreRepository.migrateLocalDataIfRequired(personalWsId, uid, database)
 
-            // 8. Set activeWorkspaceId & Ready state ONLY AFTER bootstrap succeeds
-            _activeWorkspaceId.value = wsId
+            // 8. Set Ready state ONLY AFTER bootstrap succeeds
             _isInitialized.value = true
-            _workspaceInitState.value = WorkspaceInitState.Ready(wsId)
+            _workspaceInitState.value = WorkspaceInitState.Ready(personalWsId)
 
-            // 9. Start real-time snapshot listeners
-            attachRealtimeListeners(wsId)
-            membershipListener?.remove()
-            membershipListener = firestoreRepository.listenToUserMemberships(uid) { updatedSharedIds ->
-                Log.d("TRAC_WORKSPACE", "DISCOVER uid=$uid personal=$personalWsId shared=$updatedSharedIds")
-                if (updatedSharedIds.isNotEmpty()) {
-                    val currentWs = _activeWorkspaceId.value
-                    if (currentWs == personalWsId || currentWs.isNullOrBlank()) {
-                        val targetShared = updatedSharedIds.first()
-                        scope.launch {
-                            Log.d("TRAC_WORKSPACE", "Auto-activating shared workspace: $targetShared")
-                            switchActiveWorkspace(targetShared, userProfile)
-                        }
-                    }
-                }
-            }
-            refreshWorkspaceMembers(wsId)
+            // 9. Start real-time snapshot listeners for all visible workspaces
+            attachRealtimeListenersForVisibleWorkspaces()
 
-            // 10. Run pushUnsyncedToCloud() for that workspace
-            pushUnsyncedToCloud(wsId)
+            // 10. Start listener for collaboration groups discovery
+            listenToCollaborationGroupsDiscovery(uid, personalWsId)
 
-            Result.success(wsId)
+            refreshWorkspaceMembers(personalWsId)
+
+            // 11. Run pushUnsyncedToCloud() for user's personal workspace
+            pushUnsyncedToCloud(personalWsId)
+
+            Result.success(personalWsId)
         } catch (e: Throwable) {
             Log.e(TAG, "Workspace bootstrap failed: ${e.message}", e)
             _workspaceInitState.value = WorkspaceInitState.Error(e)
@@ -184,9 +181,45 @@ class WorkspaceRepository(
         }
     }
 
-    private fun attachRealtimeListeners(wsId: String) {
-        firestoreRepository.startRealtimeListeners(
-            workspaceId = wsId,
+    private fun listenToCollaborationGroupsDiscovery(uid: String, personalWsId: String) {
+        collaborationIndexListener?.remove()
+        collaborationIndexListener = firestoreRepository.listenToUserCollaborationGroups(uid) { groupIds ->
+            val allGroups = (groupIds + personalWsId).distinct()
+            Log.d("TRAC_WORKSPACE", "Collaboration groups updated for $uid: $allGroups")
+
+            // Listen to each group's members
+            val currentListeningGroups = groupMembersListeners.keys.toSet()
+            val groupsToRemove = currentListeningGroups - allGroups.toSet()
+            for (gId in groupsToRemove) {
+                groupMembersListeners.remove(gId)?.remove()
+            }
+
+            for (groupId in allGroups) {
+                if (!groupMembersListeners.containsKey(groupId)) {
+                    val listener = firestoreRepository.listenToCollaborationGroupMembers(groupId) { memberWorkspaces ->
+                        scope.launch {
+                            val currentVisible = _visibleWorkspaceIds.value.toMutableSet()
+                            currentVisible.add(personalWsId)
+                            currentVisible.addAll(memberWorkspaces)
+                            if (currentVisible != _visibleWorkspaceIds.value) {
+                                Log.d("TRAC_WORKSPACE", "Visible workspaces updated: $currentVisible")
+                                _visibleWorkspaceIds.value = currentVisible
+                                attachRealtimeListenersForVisibleWorkspaces()
+                            }
+                        }
+                    }
+                    if (listener != null) {
+                        groupMembersListeners[groupId] = listener
+                    }
+                }
+            }
+        }
+    }
+
+    private fun attachRealtimeListenersForVisibleWorkspaces() {
+        val visibleIds = _visibleWorkspaceIds.value
+        firestoreRepository.startRealtimeListenersForWorkspaces(
+            workspaceIds = visibleIds,
             onJobsUpdated = { remoteJobs, listenerWsId ->
                 scope.launch {
                     syncRemoteJobsToLocal(remoteJobs, listenerWsId)
@@ -219,12 +252,14 @@ class WorkspaceRepository(
             },
             onSettingsUpdated = { remoteSettingsMap, listenerWsId ->
                 scope.launch {
-                    val currentWsId = _activeWorkspaceId.value
-                    if (listenerWsId != currentWsId || currentWsId.isNullOrBlank()) return@launch
-                    val current = appSettingsDao.getSettingsForWorkspaceOnce(listenerWsId)
-                        ?: AppSettingsEntity(workspaceId = listenerWsId)
-                    val updated = appSettingsFromFirestoreMap(remoteSettingsMap, current, fallbackWorkspaceId = listenerWsId)
-                    appSettingsDao.insertOrUpdateSettings(updated)
+                    val pWsId = _personalWorkspaceId.value
+                    // Only update local app settings if this is from the personal workspace
+                    if (listenerWsId == pWsId && !pWsId.isNullOrBlank()) {
+                        val current = appSettingsDao.getSettingsForWorkspaceOnce(listenerWsId)
+                            ?: AppSettingsEntity(workspaceId = listenerWsId)
+                        val updated = appSettingsFromFirestoreMap(remoteSettingsMap, current, fallbackWorkspaceId = listenerWsId)
+                        appSettingsDao.insertOrUpdateSettings(updated)
+                    }
                 }
             }
         )
@@ -235,13 +270,17 @@ class WorkspaceRepository(
      */
     fun stopWorkspaceListeners() {
         firestoreRepository.stopRealtimeListeners()
-        membershipListener?.remove()
-        membershipListener = null
+        collaborationIndexListener?.remove()
+        collaborationIndexListener = null
+        groupMembersListeners.values.forEach { it.remove() }
+        groupMembersListeners.clear()
         _workspaceMembers.value = emptyList()
         _isInitialized.value = false
         _workspaceInitState.value = WorkspaceInitState.Uninitialized
         _settingsSyncState.value = SettingsSyncState.Uninitialized
         activeUid = null
+        _personalWorkspaceId.value = null
+        _visibleWorkspaceIds.value = emptySet()
         _activeWorkspaceId.value = null
         Log.d(TAG, "Workspace listeners stopped.")
     }
@@ -249,10 +288,9 @@ class WorkspaceRepository(
     // --- Remote to Local Synchronization Helpers (ID-based Reconciliation) ---
 
     private suspend fun syncRemoteJobsToLocal(remoteJobs: List<JobEntryEntity>, listenerWsId: String) {
-        val currentWsId = _activeWorkspaceId.value
         val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-        if (listenerWsId != currentWsId || activeUid != currentUid || currentWsId.isNullOrBlank()) {
-            Log.w(TAG, "Ignoring jobs snapshot from $listenerWsId because active workspace is $currentWsId")
+        if (activeUid != currentUid || !_visibleWorkspaceIds.value.contains(listenerWsId)) {
+            Log.w(TAG, "Ignoring jobs snapshot from $listenerWsId because it is not in visible workspaces")
             return
         }
         try {
@@ -271,10 +309,9 @@ class WorkspaceRepository(
     }
 
     private suspend fun syncRemoteExpensesToLocal(remoteExpenses: List<ExpenseEntity>, listenerWsId: String) {
-        val currentWsId = _activeWorkspaceId.value
         val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-        if (listenerWsId != currentWsId || activeUid != currentUid || currentWsId.isNullOrBlank()) {
-            Log.w(TAG, "Ignoring expenses snapshot from $listenerWsId because active workspace is $currentWsId")
+        if (activeUid != currentUid || !_visibleWorkspaceIds.value.contains(listenerWsId)) {
+            Log.w(TAG, "Ignoring expenses snapshot from $listenerWsId because it is not in visible workspaces")
             return
         }
         try {
@@ -293,10 +330,9 @@ class WorkspaceRepository(
     }
 
     private suspend fun syncRemoteCustomersToLocal(remoteCustomers: List<CustomerEntity>, listenerWsId: String) {
-        val currentWsId = _activeWorkspaceId.value
         val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-        if (listenerWsId != currentWsId || activeUid != currentUid || currentWsId.isNullOrBlank()) {
-            Log.w(TAG, "Ignoring customers snapshot from $listenerWsId because active workspace is $currentWsId")
+        if (activeUid != currentUid || !_visibleWorkspaceIds.value.contains(listenerWsId)) {
+            Log.w(TAG, "Ignoring customers snapshot from $listenerWsId because it is not in visible workspaces")
             return
         }
         try {
@@ -315,10 +351,9 @@ class WorkspaceRepository(
     }
 
     private suspend fun syncRemoteTractorsToLocal(remoteTractors: List<TractorEntity>, listenerWsId: String) {
-        val currentWsId = _activeWorkspaceId.value
         val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-        if (listenerWsId != currentWsId || activeUid != currentUid || currentWsId.isNullOrBlank()) {
-            Log.w(TAG, "Ignoring tractors snapshot from $listenerWsId because active workspace is $currentWsId")
+        if (activeUid != currentUid || !_visibleWorkspaceIds.value.contains(listenerWsId)) {
+            Log.w(TAG, "Ignoring tractors snapshot from $listenerWsId because it is not in visible workspaces")
             return
         }
         try {
@@ -337,10 +372,9 @@ class WorkspaceRepository(
     }
 
     private suspend fun syncRemotePartnersToLocal(remotePartners: List<PartnerEntity>, listenerWsId: String) {
-        val currentWsId = _activeWorkspaceId.value
         val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-        if (listenerWsId != currentWsId || activeUid != currentUid || currentWsId.isNullOrBlank()) {
-            Log.w(TAG, "Ignoring partners snapshot from $listenerWsId because active workspace is $currentWsId")
+        if (activeUid != currentUid || !_visibleWorkspaceIds.value.contains(listenerWsId)) {
+            Log.w(TAG, "Ignoring partners snapshot from $listenerWsId because it is not in visible workspaces")
             return
         }
         try {
@@ -359,10 +393,9 @@ class WorkspaceRepository(
     }
 
     private suspend fun syncRemoteWithdrawalsToLocal(remoteWithdrawals: List<WithdrawalEntity>, listenerWsId: String) {
-        val currentWsId = _activeWorkspaceId.value
         val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-        if (listenerWsId != currentWsId || activeUid != currentUid || currentWsId.isNullOrBlank()) {
-            Log.w(TAG, "Ignoring withdrawals snapshot from $listenerWsId because active workspace is $currentWsId")
+        if (activeUid != currentUid || !_visibleWorkspaceIds.value.contains(listenerWsId)) {
+            Log.w(TAG, "Ignoring withdrawals snapshot from $listenerWsId because it is not in visible workspaces")
             return
         }
         try {
@@ -381,6 +414,8 @@ class WorkspaceRepository(
     }
 
     private suspend fun getOrResolveWorkspaceId(): String? {
+        val pWsId = _personalWorkspaceId.value
+        if (!pWsId.isNullOrBlank()) return pWsId
         val readyWsId = (_workspaceInitState.value as? WorkspaceInitState.Ready)?.workspaceId
         if (!readyWsId.isNullOrBlank()) return readyWsId
         val current = _activeWorkspaceId.value ?: currentWorkspace.value?.workspaceId
@@ -826,11 +861,14 @@ class WorkspaceRepository(
     }
 
     suspend fun refreshWorkspaceMembers(workspaceId: String? = null) {
-        val wsId = workspaceId ?: _activeWorkspaceId.value ?: return
-        if (isCloudReady()) {
+        if (!isCloudReady()) return
+        val visible = _visibleWorkspaceIds.value
+        val allMembers = mutableListOf<WorkspaceMember>()
+        for (wsId in visible) {
             val members = firestoreRepository.getWorkspaceMembers(wsId)
-            _workspaceMembers.value = members
+            allMembers.addAll(members)
         }
+        _workspaceMembers.value = allMembers.distinctBy { it.uid.ifBlank { it.phoneNumber ?: "" } }
     }
 
     suspend fun addPartnerDirectly(name: String, phone: String, role: String): DirectAddPartnerResult {
@@ -891,7 +929,7 @@ class WorkspaceRepository(
         // 3. Directly create workspace membership and user discovery index
         val currentSettings = appSettingsDao.getSettingsForWorkspaceOnce(wsId)
             ?: AppSettingsEntity(workspaceId = wsId)
-        val businessName = currentSettings.businessName.ifBlank { "AIDHUNT Tractor Fleet" }
+        val businessName = currentSettings.businessName.ifBlank { "" }
 
         val addResult = firestoreRepository.addPartnerMemberDirectly(
             workspaceId = wsId,
@@ -903,12 +941,48 @@ class WorkspaceRepository(
             businessName = businessName
         )
 
+        // 4. Resolve partner's personal workspace ID and link to collaboration group
+        val partnerUserDoc = firestoreRepository.getWorkspaceDetails(partnerUid) // or lookup in users
+        val partnerPersonalWsId = "ws_${partnerUid.replace(Regex("[^a-zA-Z0-9]"), "").take(16).ifBlank { "main" }}"
+        firestoreRepository.addPartnerToCollaborationGroup(
+            ownerWorkspaceId = wsId,
+            ownerUid = activeUid ?: "",
+            partnerUid = partnerUid,
+            partnerWorkspaceId = partnerPersonalWsId
+        )
+
+        // Update local visible workspaces
+        val currentVisible = _visibleWorkspaceIds.value.toMutableSet()
+        currentVisible.add(wsId)
+        currentVisible.add(partnerPersonalWsId)
+        _visibleWorkspaceIds.value = currentVisible
+        attachRealtimeListenersForVisibleWorkspaces()
+
         return if (addResult.isSuccess) {
             refreshWorkspaceMembers(wsId)
             DirectAddPartnerResult.Success(partnerEntity, partnerUid)
         } else {
             val err = addResult.exceptionOrNull()?.message ?: "Could not connect partner"
             DirectAddPartnerResult.Error(err)
+        }
+    }
+
+    suspend fun removePartner(partner: PartnerEntity) {
+        val wsId = getOrResolveWorkspaceId() ?: ""
+        partnerDao.deletePartner(partner)
+
+        if (isCloudReady() && wsId.isNotBlank()) {
+            val partnerUid = firestoreRepository.lookupPhoneInDirectory(partner.phone)
+            firestoreRepository.removePartnerFromWorkspace(wsId, partnerUid, partner.phone)
+            if (!partnerUid.isNullOrBlank()) {
+                firestoreRepository.removePartnerFromCollaborationGroup(wsId, partnerUid)
+                val partnerPersonalWsId = "ws_${partnerUid.replace(Regex("[^a-zA-Z0-9]"), "").take(16).ifBlank { "main" }}"
+                val currentVisible = _visibleWorkspaceIds.value.toMutableSet()
+                currentVisible.remove(partnerPersonalWsId)
+                _visibleWorkspaceIds.value = currentVisible
+                attachRealtimeListenersForVisibleWorkspaces()
+            }
+            refreshWorkspaceMembers(wsId)
         }
     }
 
@@ -959,7 +1033,10 @@ class WorkspaceRepository(
 
             // Reconnect real-time listeners for the new workspace
             if (isCloudReady()) {
-                attachRealtimeListeners(targetWorkspaceId)
+                val currentVisible = _visibleWorkspaceIds.value.toMutableSet()
+                currentVisible.add(targetWorkspaceId)
+                _visibleWorkspaceIds.value = currentVisible
+                attachRealtimeListenersForVisibleWorkspaces()
                 refreshWorkspaceMembers(targetWorkspaceId)
                 pushUnsyncedToCloud(targetWorkspaceId)
             }
@@ -974,16 +1051,25 @@ class WorkspaceRepository(
     }
 
     suspend fun removePartnerFromWorkspace(partner: PartnerEntity) {
-        val currentWsId = _activeWorkspaceId.value ?: partner.workspaceId
+        val currentWsId = _personalWorkspaceId.value ?: _activeWorkspaceId.value ?: partner.workspaceId
         try {
             partnerDao.deletePartner(partner)
             if (isCloudReady() && currentWsId.isNotBlank()) {
+                val partnerUid = firestoreRepository.lookupPhoneInDirectory(partner.phone)
                 firestoreRepository.deletePartner(currentWsId, partner.id)
                 firestoreRepository.removePartnerFromWorkspace(
                     workspaceId = currentWsId,
-                    partnerUid = null,
+                    partnerUid = partnerUid,
                     partnerPhone = partner.phone
                 )
+                if (!partnerUid.isNullOrBlank()) {
+                    firestoreRepository.removePartnerFromCollaborationGroup(currentWsId, partnerUid)
+                    val partnerPersonalWsId = "ws_${partnerUid.replace(Regex("[^a-zA-Z0-9]"), "").take(16).ifBlank { "main" }}"
+                    val currentVisible = _visibleWorkspaceIds.value.toMutableSet()
+                    currentVisible.remove(partnerPersonalWsId)
+                    _visibleWorkspaceIds.value = currentVisible
+                    attachRealtimeListenersForVisibleWorkspaces()
+                }
             }
             Log.d("TRAC_PARTNER", "Removed partner ${partner.name} from workspace $currentWsId")
         } catch (e: Exception) {

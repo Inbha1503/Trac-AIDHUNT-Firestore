@@ -318,7 +318,6 @@ fun AccountMainDashboard(
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
     var showTermsDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
-    var showWorkspaceSwitchDialog by remember { mutableStateOf(false) }
 
     // Section expansion states (all expanded by default like in screenshot)
     var isAccountExpanded by remember { mutableStateOf(true) }
@@ -552,7 +551,7 @@ fun AccountMainDashboard(
                                 verticalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
                                 Text(
-                                    text = settings.businessName.ifBlank { "Shri Guru Agency" },
+                                    text = settings.businessName.ifBlank { if (isTamil) "டிராக்டர் சேவைகள்" else "Tractor Services" },
                                     fontSize = if (responsive.isSmallPhone) 16.sp else 17.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF133220),
@@ -641,83 +640,6 @@ fun AccountMainDashboard(
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // =========================================================================
-        // Workspace Selector Card (Personal vs Shared Workspace Switcher)
-        // =========================================================================
-        if (availableWorkspaces.isNotEmpty()) {
-            item {
-                val isShared = !(activeWorkspaceId ?: "").contains("personal")
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(1.dp, Color(0xFFC8E6C9)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("account_workspace_selector_card")
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isShared) Color(0xFFE8F5E9) else Color(0xFFE3F2FD)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = if (isShared) Icons.Default.Business else Icons.Default.Person,
-                                    contentDescription = null,
-                                    tint = if (isShared) Color(0xFF166534) else Color(0xFF1565C0),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            Column {
-                                Text(
-                                    text = if (isTamil) "செயலில் உள்ள கணக்கு இடம்" else "Active Workspace",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = AppTheme.colors.textMuted
-                                )
-                                val currentWs = availableWorkspaces.find { it.workspaceId == activeWorkspaceId }
-                                Text(
-                                    text = currentWs?.name ?: (if (isShared) "Shared Workspace" else "Personal Workspace"),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = AppTheme.colors.textPrimary
-                                )
-                            }
-                        }
-
-                        if (availableWorkspaces.size > 1) {
-                            Button(
-                                onClick = { showWorkspaceSwitchDialog = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = DeepSageGreen),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = if (isTamil) "மாற்று" else "Switch",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
                                 )
                             }
                         }
@@ -1241,113 +1163,6 @@ fun AccountMainDashboard(
             }
         )
     }
-
-    // Workspace Switch Dialog
-    if (showWorkspaceSwitchDialog) {
-        AlertDialog(
-            onDismissRequest = { showWorkspaceSwitchDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Sync,
-                        contentDescription = null,
-                        tint = DeepSageGreen,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (isTamil) "கணக்கு இடத்தை மாற்றவும்" else "Switch Active Workspace",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 17.sp,
-                        color = ForestGreenHeader
-                    )
-                }
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = if (isTamil) 
-                            "நீங்கள் அணுகக்கூடிய கணக்கு இடத்தைத் தேர்ந்தெடுக்கவும். உங்கள் தரவு பாதுகாப்பாக தனித்தனியாக வைக்கப்படும்." 
-                        else 
-                            "Select which workspace you want to view and manage. Your personal and shared records remain distinct and safe.",
-                        fontSize = 12.5.sp,
-                        color = AppTheme.colors.textSecondary
-                    )
-
-                    availableWorkspaces.forEach { ws ->
-                        val isSelected = ws.workspaceId == activeWorkspaceId
-                        val isWsShared = !ws.workspaceId.contains("personal")
-                        Card(
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isSelected) SoftSageGreen.copy(alpha = 0.6f) else Color(0xFFF9FAFB)
-                            ),
-                            border = BorderStroke(
-                                1.5.dp,
-                                if (isSelected) DeepSageGreen else Color(0xFFE5E7EB)
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onSwitchWorkspace(ws.workspaceId)
-                                    showWorkspaceSwitchDialog = false
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (isWsShared) Icons.Default.Business else Icons.Default.Person,
-                                        contentDescription = null,
-                                        tint = if (isSelected) DeepSageGreen else Color.Gray,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Column {
-                                        Text(
-                                            text = ws.name,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.5.sp,
-                                            color = if (isSelected) DeepSageGreen else AppTheme.colors.textPrimary
-                                        )
-                                        Text(
-                                            text = if (isWsShared) (if (isTamil) "பகிர்வு கணக்கு" else "Shared Workspace") else (if (isTamil) "தனிப்பட்ட கணக்கு" else "Personal Workspace"),
-                                            fontSize = 11.sp,
-                                            color = AppTheme.colors.textMuted
-                                        )
-                                    }
-                                }
-
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = "Selected",
-                                        tint = DeepSageGreen,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showWorkspaceSwitchDialog = false }) {
-                    Text(if (isTamil) "மூடு" else "Close")
-                }
-            }
-        )
-    }
 }
 
 // -----------------------------------------------------------------------------
@@ -1525,11 +1340,11 @@ fun EditProfileInfoDialog(
     onSave: (AppSettingsEntity) -> Unit,
     onPickPhoto: () -> Unit
 ) {
-    var businessName by remember { mutableStateOf(settings.businessName.ifBlank { "Shri Guru Agency" }) }
-    var activePartnerName by remember { mutableStateOf(settings.activePartnerName.ifBlank { "Sundaram" }) }
-    var businessPhone by remember { mutableStateOf(settings.businessPhone.ifBlank { settings.activePartnerPhone.ifBlank { "7418497079" } }) }
-    var businessAddress by remember { mutableStateOf(settings.businessAddress.ifBlank { "Red Hills, Chennai, Tamilnadu" }) }
-    var gstNumber by remember { mutableStateOf(settings.gstNumber.ifBlank { "Hzhsg" }) }
+    var businessName by remember { mutableStateOf(settings.businessName) }
+    var activePartnerName by remember { mutableStateOf(settings.activePartnerName) }
+    var businessPhone by remember { mutableStateOf(settings.businessPhone.ifBlank { settings.activePartnerPhone }) }
+    var businessAddress by remember { mutableStateOf(settings.businessAddress) }
+    var gstNumber by remember { mutableStateOf(settings.gstNumber) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2690,7 +2505,7 @@ fun ManagePartnersPage(
                             fontSize = 12.sp,
                             color = TextSecondaryDark
                         )
-                        if (isConnected) {
+                        if (isCurrent || isConnected) {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
                                 color = Color(0xFFE8F5E9),

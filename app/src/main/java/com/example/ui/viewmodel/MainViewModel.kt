@@ -115,6 +115,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val workspaceInitState: StateFlow<WorkspaceInitState> = workspaceRepository.workspaceInitState
     val activeWorkspaceId: StateFlow<String?> = workspaceRepository.activeWorkspaceId
+    val personalWorkspaceId: StateFlow<String?> = workspaceRepository.personalWorkspaceId
+    val visibleWorkspaceIds: StateFlow<Set<String>> = workspaceRepository.visibleWorkspaceIds
     val pendingInvitations: StateFlow<List<WorkspaceInvitation>> = workspaceRepository.pendingInvitations
     val workspaceMembers: StateFlow<List<WorkspaceMember>> = workspaceRepository.workspaceMembers
 
@@ -152,27 +154,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Unsynced entity counters scoped by active workspace
+    // Unsynced entity counters scoped by active personal workspace
     @OptIn(ExperimentalCoroutinesApi::class)
-    val unsyncedJobsCount: StateFlow<Int> = activeWorkspaceId.flatMapLatest { wsId ->
+    val unsyncedJobsCount: StateFlow<Int> = personalWorkspaceId.flatMapLatest { wsId ->
         if (wsId.isNullOrBlank()) MutableStateFlow(0)
         else database.jobEntryDao().getUnsyncedCountForWorkspace(wsId)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val unsyncedExpensesCount: StateFlow<Int> = activeWorkspaceId.flatMapLatest { wsId ->
+    val unsyncedExpensesCount: StateFlow<Int> = personalWorkspaceId.flatMapLatest { wsId ->
         if (wsId.isNullOrBlank()) MutableStateFlow(0)
         else database.expenseDao().getUnsyncedCountForWorkspace(wsId)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val unsyncedWithdrawalsCount: StateFlow<Int> = activeWorkspaceId.flatMapLatest { wsId ->
+    val unsyncedWithdrawalsCount: StateFlow<Int> = personalWorkspaceId.flatMapLatest { wsId ->
         if (wsId.isNullOrBlank()) MutableStateFlow(0)
         else database.withdrawalDao().getUnsyncedCountForWorkspace(wsId)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val unsyncedCustomersCount: StateFlow<Int> = activeWorkspaceId.flatMapLatest { wsId ->
+    val unsyncedCustomersCount: StateFlow<Int> = personalWorkspaceId.flatMapLatest { wsId ->
         if (wsId.isNullOrBlank()) MutableStateFlow(0)
         else database.customerDao().getUnsyncedCountForWorkspace(wsId)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
@@ -186,88 +188,88 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         jobs + exp + wth + cust
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
-    // 1. Settings & Profile scoped to active workspace
+    // 1. Settings & Profile scoped to user's personal workspace
     @OptIn(ExperimentalCoroutinesApi::class)
-    val settings: StateFlow<AppSettingsEntity> = activeWorkspaceId.flatMapLatest { wsId ->
+    val settings: StateFlow<AppSettingsEntity> = personalWorkspaceId.flatMapLatest { wsId ->
         if (wsId.isNullOrBlank()) database.appSettingsDao().getSettings()
         else database.appSettingsDao().getSettingsForWorkspace(wsId)
-    }.combine(MutableStateFlow(Unit)) { set, _ -> set ?: AppSettingsEntity(workspaceId = activeWorkspaceId.value ?: "") }
+    }.combine(MutableStateFlow(Unit)) { set, _ -> set ?: AppSettingsEntity(workspaceId = personalWorkspaceId.value ?: "") }
      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppSettingsEntity())
 
-    // 2. Partners scoped to active workspace
+    // 2. Partners scoped across all visible workspaces
     @OptIn(ExperimentalCoroutinesApi::class)
-    val partners: StateFlow<List<PartnerEntity>> = activeWorkspaceId.flatMapLatest { wsId ->
-        if (wsId.isNullOrBlank()) MutableStateFlow(emptyList())
-        else database.partnerDao().getPartnersForWorkspace(wsId)
+    val partners: StateFlow<List<PartnerEntity>> = visibleWorkspaceIds.flatMapLatest { wsIds ->
+        if (wsIds.isEmpty()) MutableStateFlow(emptyList())
+        else database.partnerDao().getPartnersForWorkspaces(wsIds.toList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // 3. Tractors scoped to active workspace
+    // 3. Tractors scoped across all visible workspaces
     @OptIn(ExperimentalCoroutinesApi::class)
-    val tractors: StateFlow<List<TractorEntity>> = activeWorkspaceId.flatMapLatest { wsId ->
-        if (wsId.isNullOrBlank()) MutableStateFlow(emptyList())
-        else database.tractorDao().getTractorsForWorkspace(wsId)
+    val tractors: StateFlow<List<TractorEntity>> = visibleWorkspaceIds.flatMapLatest { wsIds ->
+        if (wsIds.isEmpty()) MutableStateFlow(emptyList())
+        else database.tractorDao().getTractorsForWorkspaces(wsIds.toList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // 4. Customers scoped to active workspace
+    // 4. Customers scoped across all visible workspaces
     @OptIn(ExperimentalCoroutinesApi::class)
-    val customers: StateFlow<List<CustomerEntity>> = activeWorkspaceId.flatMapLatest { wsId ->
-        if (wsId.isNullOrBlank()) MutableStateFlow(emptyList())
-        else database.customerDao().getCustomersForWorkspace(wsId)
+    val customers: StateFlow<List<CustomerEntity>> = visibleWorkspaceIds.flatMapLatest { wsIds ->
+        if (wsIds.isEmpty()) MutableStateFlow(emptyList())
+        else database.customerDao().getCustomersForWorkspaces(wsIds.toList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val customersWithDue: StateFlow<List<CustomerEntity>> = activeWorkspaceId.flatMapLatest { wsId ->
-        if (wsId.isNullOrBlank()) MutableStateFlow(emptyList())
-        else database.customerDao().getCustomersWithDueForWorkspace(wsId)
+    val customersWithDue: StateFlow<List<CustomerEntity>> = visibleWorkspaceIds.flatMapLatest { wsIds ->
+        if (wsIds.isEmpty()) MutableStateFlow(emptyList())
+        else database.customerDao().getCustomersWithDueForWorkspaces(wsIds.toList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // 5. Jobs scoped to active workspace
+    // 5. Jobs scoped across all visible workspaces
     @OptIn(ExperimentalCoroutinesApi::class)
-    val jobs: StateFlow<List<JobEntryEntity>> = activeWorkspaceId.flatMapLatest { wsId ->
-        if (wsId.isNullOrBlank()) MutableStateFlow(emptyList())
-        else database.jobEntryDao().getJobsForWorkspace(wsId)
+    val jobs: StateFlow<List<JobEntryEntity>> = visibleWorkspaceIds.flatMapLatest { wsIds ->
+        if (wsIds.isEmpty()) MutableStateFlow(emptyList())
+        else database.jobEntryDao().getJobsForWorkspaces(wsIds.toList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // 6. Expenses scoped to active workspace
+    // 6. Expenses scoped across all visible workspaces
     @OptIn(ExperimentalCoroutinesApi::class)
-    val expenses: StateFlow<List<ExpenseEntity>> = activeWorkspaceId.flatMapLatest { wsId ->
-        if (wsId.isNullOrBlank()) MutableStateFlow(emptyList())
-        else database.expenseDao().getExpensesForWorkspace(wsId)
+    val expenses: StateFlow<List<ExpenseEntity>> = visibleWorkspaceIds.flatMapLatest { wsIds ->
+        if (wsIds.isEmpty()) MutableStateFlow(emptyList())
+        else database.expenseDao().getExpensesForWorkspaces(wsIds.toList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // 7. Withdrawals scoped to active workspace
+    // 7. Withdrawals scoped across all visible workspaces
     @OptIn(ExperimentalCoroutinesApi::class)
-    val withdrawals: StateFlow<List<WithdrawalEntity>> = activeWorkspaceId.flatMapLatest { wsId ->
-        if (wsId.isNullOrBlank()) MutableStateFlow(emptyList())
-        else database.withdrawalDao().getWithdrawalsForWorkspace(wsId)
+    val withdrawals: StateFlow<List<WithdrawalEntity>> = visibleWorkspaceIds.flatMapLatest { wsIds ->
+        if (wsIds.isEmpty()) MutableStateFlow(emptyList())
+        else database.withdrawalDao().getWithdrawalsForWorkspaces(wsIds.toList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Aggregates & Financial calculations scoped to active workspace
+    // Aggregates & Financial calculations scoped across visible workspaces
     @OptIn(ExperimentalCoroutinesApi::class)
-    val totalReceived: StateFlow<Double> = activeWorkspaceId.flatMapLatest { wsId ->
-        if (wsId.isNullOrBlank()) MutableStateFlow(0.0)
-        else database.jobEntryDao().getTotalReceivedForWorkspace(wsId)
+    val totalReceived: StateFlow<Double> = visibleWorkspaceIds.flatMapLatest { wsIds ->
+        if (wsIds.isEmpty()) MutableStateFlow(0.0)
+        else database.jobEntryDao().getTotalReceivedForWorkspaces(wsIds.toList())
     }.combine(MutableStateFlow(Unit)) { total, _ -> total ?: 0.0 }
      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val totalPending: StateFlow<Double> = activeWorkspaceId.flatMapLatest { wsId ->
-        if (wsId.isNullOrBlank()) MutableStateFlow(0.0)
-        else database.jobEntryDao().getTotalPendingForWorkspace(wsId)
+    val totalPending: StateFlow<Double> = visibleWorkspaceIds.flatMapLatest { wsIds ->
+        if (wsIds.isEmpty()) MutableStateFlow(0.0)
+        else database.jobEntryDao().getTotalPendingForWorkspaces(wsIds.toList())
     }.combine(MutableStateFlow(Unit)) { total, _ -> total ?: 0.0 }
      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val totalExpenses: StateFlow<Double> = activeWorkspaceId.flatMapLatest { wsId ->
-        if (wsId.isNullOrBlank()) MutableStateFlow(0.0)
-        else database.expenseDao().getTotalExpensesForWorkspace(wsId)
+    val totalExpenses: StateFlow<Double> = visibleWorkspaceIds.flatMapLatest { wsIds ->
+        if (wsIds.isEmpty()) MutableStateFlow(0.0)
+        else database.expenseDao().getTotalExpensesForWorkspaces(wsIds.toList())
     }.combine(MutableStateFlow(Unit)) { total, _ -> total ?: 0.0 }
      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val totalWithdrawn: StateFlow<Double> = activeWorkspaceId.flatMapLatest { wsId ->
-        if (wsId.isNullOrBlank()) MutableStateFlow(0.0)
-        else database.withdrawalDao().getTotalWithdrawnForWorkspace(wsId)
+    val totalWithdrawn: StateFlow<Double> = visibleWorkspaceIds.flatMapLatest { wsIds ->
+        if (wsIds.isEmpty()) MutableStateFlow(0.0)
+        else database.withdrawalDao().getTotalWithdrawnForWorkspaces(wsIds.toList())
     }.combine(MutableStateFlow(Unit)) { total, _ -> total ?: 0.0 }
      .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
@@ -353,7 +355,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearNewEntryDraft() {
         val set = settings.value
-        val defaultTrac = if (set.lockedTractorLabel.isNotBlank()) set.lockedTractorLabel else (tractors.value.firstOrNull()?.label ?: "Mahindra 575 DI")
+        val defaultTrac = if (set.lockedTractorLabel.isNotBlank()) set.lockedTractorLabel else (tractors.value.firstOrNull()?.label ?: "")
         _newEntryDraft.value = NewEntryDraft.createDefault(
             defaultTractor = defaultTrac,
             lockedTractor = set.lockedTractorLabel,
@@ -635,6 +637,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 android.util.Log.w("TRAC_FIRESTORE", "Cloud update settings failed: ${e.message}")
                 onSuccess()
+            }
+        }
+    }
+
+    fun completeInitialSetup(
+        displayName: String,
+        businessName: String,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            try {
+                val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+                if (user != null) {
+                    val uid = user.uid
+                    try {
+                        val profileUpdates = com.google.firebase.auth.UserProfileChangeRequest.Builder()
+                            .setDisplayName(displayName.trim())
+                            .build()
+                        user.updateProfile(profileUpdates)
+                    } catch (e: Exception) {
+                        android.util.Log.w("TRAC_SETUP", "FirebaseAuth updateProfile failed: ${e.message}")
+                    }
+                    try {
+                        com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                            .collection("users").document(uid)
+                            .set(mapOf("displayName" to displayName.trim(), "businessName" to businessName.trim()), com.google.firebase.firestore.SetOptions.merge())
+                    } catch (e: Exception) {
+                        android.util.Log.w("TRAC_SETUP", "Firestore user update failed: ${e.message}")
+                    }
+                }
+
+                // Update Room AppSettings & workspace settings
+                val current = settings.value
+                val personalWsId = workspaceRepository.getPersonalWorkspaceId() ?: current.workspaceId
+                val updated = current.copy(
+                    workspaceId = personalWsId,
+                    businessName = businessName.trim(),
+                    ownerName = displayName.trim(),
+                    activePartnerName = displayName.trim()
+                )
+                workspaceRepository.updateSettings(updated)
+
+                if (personalWsId.isNotBlank()) {
+                    try {
+                        com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                            .collection("workspaces").document(personalWsId)
+                            .set(mapOf("name" to businessName.trim(), "updatedAt" to System.currentTimeMillis()), com.google.firebase.firestore.SetOptions.merge())
+                    } catch (e: Exception) {
+                        android.util.Log.w("TRAC_SETUP", "Firestore workspace name update failed: ${e.message}")
+                    }
+                }
+
+                onSuccess()
+            } catch (e: Exception) {
+                android.util.Log.e("TRAC_SETUP", "Initial setup failed: ${e.message}", e)
+                onError(e.message ?: "Failed to save profile setup")
             }
         }
     }

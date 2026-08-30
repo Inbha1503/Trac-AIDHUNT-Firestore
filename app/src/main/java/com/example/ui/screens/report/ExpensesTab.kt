@@ -1159,7 +1159,7 @@ fun AddOrEditExpenseScreen(
             }
             matchedPartner?.let { "${it.name} (${it.role})" }
                 ?: settings.activePartnerName.ifBlank {
-                    partners.firstOrNull()?.let { "${it.name} (${it.role})" } ?: "Muthu (Operator 1)"
+                    partners.firstOrNull()?.let { "${it.name} (${it.role})" } ?: ""
                 }
         }
     }
@@ -1168,7 +1168,7 @@ fun AddOrEditExpenseScreen(
     var selectedType by remember { mutableStateOf(initialExpense?.expenseType ?: "Diesel") }
     var selectedOperator by remember { mutableStateOf(defaultOperatorName) }
     var selectedTractor by remember {
-        mutableStateOf(initialExpense?.tractorLabel ?: tractors.firstOrNull()?.label ?: "TN07AB7444")
+        mutableStateOf(initialExpense?.tractorLabel ?: tractors.firstOrNull()?.label ?: "")
     }
     var amountText by remember { mutableStateOf(if (initialExpense != null) initialExpense.amount.toInt().toString() else "") }
     var descriptionText by remember { mutableStateOf(initialExpense?.description ?: "") }
@@ -1182,7 +1182,7 @@ fun AddOrEditExpenseScreen(
     var hasValidated by remember { mutableStateOf(false) }
     val isAmountValid = (amountText.toDoubleOrNull() ?: 0.0) > 0
 
-    val formDateFormat = remember { SimpleDateFormat("dd/MM/yyyy  hh:mm a", Locale.getDefault()) }
+    val formDateFormat = remember { SimpleDateFormat("dd/MM/yyyy  hh:mm a", java.util.Locale.getDefault()) }
 
     fun doSave() {
         hasValidated = true
@@ -1197,7 +1197,7 @@ fun AddOrEditExpenseScreen(
                 tractorLabel = selectedTractor,
                 operatorName = selectedOperator,
                 description = descriptionText,
-                addedByPartner = initialExpense?.addedByPartner ?: settings.activePartnerName.ifBlank { "Muthu" },
+                addedByPartner = initialExpense?.addedByPartner ?: settings.activePartnerName.ifBlank { "" },
                 dateTimestamp = selectedTimestamp,
                 createdAt = initialExpense?.createdAt ?: System.currentTimeMillis()
             )

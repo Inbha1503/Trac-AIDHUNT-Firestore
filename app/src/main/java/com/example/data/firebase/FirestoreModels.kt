@@ -29,9 +29,105 @@ fun normalizePhoneNumber(raw: String): String {
 }
 
 @Keep
+data class CollaborationGroup(
+    val groupId: String = "",
+    val ownerUid: String = "",
+    val ownerWorkspaceId: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+) {
+    fun toMap(): Map<String, Any?> = mapOf(
+        "groupId" to groupId,
+        "ownerUid" to ownerUid,
+        "ownerWorkspaceId" to ownerWorkspaceId,
+        "createdAt" to createdAt,
+        "updatedAt" to updatedAt
+    )
+
+    companion object {
+        fun fromMap(map: Map<String, Any?>): CollaborationGroup {
+            return CollaborationGroup(
+                groupId = map["groupId"] as? String ?: "",
+                ownerUid = map["ownerUid"] as? String ?: "",
+                ownerWorkspaceId = map["ownerWorkspaceId"] as? String ?: "",
+                createdAt = (map["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                updatedAt = (map["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+            )
+        }
+    }
+}
+
+@Keep
+data class CollaborationGroupMember(
+    val uid: String = "",
+    val workspaceId: String = "",
+    val role: String = "partner", // "owner", "partner"
+    val status: String = "active", // "active", "removed"
+    val joinedAt: Long = System.currentTimeMillis(),
+    val phoneNumber: String? = null,
+    val displayName: String? = null
+) {
+    fun toMap(): Map<String, Any?> = mapOf(
+        "uid" to uid,
+        "workspaceId" to workspaceId,
+        "role" to role,
+        "status" to status,
+        "joinedAt" to joinedAt,
+        "phoneNumber" to phoneNumber,
+        "displayName" to displayName
+    )
+
+    companion object {
+        fun fromMap(map: Map<String, Any?>): CollaborationGroupMember {
+            return CollaborationGroupMember(
+                uid = map["uid"] as? String ?: "",
+                workspaceId = map["workspaceId"] as? String ?: "",
+                role = map["role"] as? String ?: "partner",
+                status = map["status"] as? String ?: "active",
+                joinedAt = (map["joinedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                phoneNumber = map["phoneNumber"] as? String,
+                displayName = map["displayName"] as? String
+            )
+        }
+    }
+}
+
+@Keep
+data class UserCollaborationGroupIndex(
+    val groupId: String = "",
+    val ownerUid: String = "",
+    val ownerWorkspaceId: String = "",
+    val role: String = "partner",
+    val status: String = "active",
+    val joinedAt: Long = System.currentTimeMillis()
+) {
+    fun toMap(): Map<String, Any?> = mapOf(
+        "groupId" to groupId,
+        "ownerUid" to ownerUid,
+        "ownerWorkspaceId" to ownerWorkspaceId,
+        "role" to role,
+        "status" to status,
+        "joinedAt" to joinedAt
+    )
+
+    companion object {
+        fun fromMap(map: Map<String, Any?>): UserCollaborationGroupIndex {
+            return UserCollaborationGroupIndex(
+                groupId = map["groupId"] as? String ?: "",
+                ownerUid = map["ownerUid"] as? String ?: "",
+                ownerWorkspaceId = map["ownerWorkspaceId"] as? String ?: "",
+                role = map["role"] as? String ?: "partner",
+                status = map["status"] as? String ?: "active",
+                joinedAt = (map["joinedAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+            )
+        }
+    }
+}
+
+@Keep
 data class Workspace(
     val workspaceId: String = "",
-    val name: String = "AIDHUNT Agri & Tractor Services",
+    val name: String = "",
     val ownerUid: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
@@ -48,7 +144,7 @@ data class Workspace(
         fun fromMap(map: Map<String, Any?>): Workspace {
             return Workspace(
                 workspaceId = map["workspaceId"] as? String ?: "",
-                name = map["name"] as? String ?: "AIDHUNT Agri & Tractor Services",
+                name = map["name"] as? String ?: "",
                 ownerUid = map["ownerUid"] as? String ?: "",
                 createdAt = (map["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
                 updatedAt = (map["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis()

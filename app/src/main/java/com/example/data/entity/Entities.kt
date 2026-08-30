@@ -102,18 +102,18 @@ data class WithdrawalEntity(
 @Entity(tableName = "app_settings")
 data class AppSettingsEntity(
     @PrimaryKey val workspaceId: String = "",
-    val businessName: String = "AIDHUNT Agri & Tractor Services",
-    val ownerName: String = "Muthu & Partners",
-    val businessPhone: String = "+91 98421 54321",
-    val businessAddress: String = "Tiruchirappalli, Tamil Nadu",
-    val gstNumber: String = "Hzhsg",
+    val businessName: String = "",
+    val ownerName: String = "",
+    val businessPhone: String = "",
+    val businessAddress: String = "",
+    val gstNumber: String = "",
     val defaultHourlyRate: Double = 1100.0,
     val currency: String = "₹",
     val language: String = "EN", // "EN", "TA" (Tamil)
-    val sharedAccountId: String = "AIDHUNT-TRAC-SHARED-01",
-    val isLoggedIn: Boolean = true,
-    val activePartnerName: String = "Muthu (Owner)",
-    val activePartnerPhone: String = "+91 98421 54321",
+    val sharedAccountId: String = "",
+    val isLoggedIn: Boolean = false,
+    val activePartnerName: String = "",
+    val activePartnerPhone: String = "",
     val profilePhotoUri: String = "",
     val lockedTractorLabel: String = "",
     val lastSyncTime: Long = System.currentTimeMillis()

@@ -572,13 +572,9 @@ fun LoginScreen(
                         OutlinedButton(
                             onClick = {
                                 phoneNumber = partner.phone
-                                otpCode = "8890"
+                                otpCode = ""
+                                isOtpSent = false
                                 selectedMethod = AuthMethod.PHONE
-                                if (onQuickPartnerSelected != null) {
-                                    onQuickPartnerSelected(partner)
-                                } else {
-                                    onLoginSuccess(partner.phone, "8890")
-                                }
                             },
                             modifier = Modifier
                                 .weight(1f)

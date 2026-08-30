@@ -9,6 +9,25 @@ import com.example.data.entity.PartnerEntity
 import com.example.data.entity.TractorEntity
 import com.example.data.entity.WithdrawalEntity
 
+/**
+ * Standard phone normalization function used across Phone Directory registration,
+ * Direct Partner Lookup, and Account management.
+ * Examples:
+ *   "8925624885" -> "+918925624885"
+ *   "+918925624885" -> "+918925624885"
+ *   "+91 89256-24885" -> "+918925624885"
+ */
+fun normalizePhoneNumber(raw: String): String {
+    val trimmed = raw.trim()
+    if (trimmed.isBlank()) return ""
+    val digits = trimmed.filter { it.isDigit() }
+    if (trimmed.startsWith("+")) {
+        return "+$digits"
+    }
+    val clean10 = digits.takeLast(10)
+    return "+91$clean10"
+}
+
 @Keep
 data class Workspace(
     val workspaceId: String = "",
@@ -41,33 +60,135 @@ data class Workspace(
 @Keep
 data class WorkspaceMember(
     val uid: String = "",
-    val role: String = "owner", // "owner", "partner"
-    val status: String = "active", // "active", "invited"
+    val role: String = "partner", // "owner", "partner"
+    val status: String = "active", // "active"
+    val phoneNumber: String? = null,
     val joinedAt: Long = System.currentTimeMillis(),
+    val addedByUid: String? = null,
+    val invitedByUid: String? = null,
     val displayName: String? = null,
-    val email: String? = null,
-    val phoneNumber: String? = null
+    val email: String? = null
 ) {
     fun toMap(): Map<String, Any?> = mapOf(
         "uid" to uid,
         "role" to role,
         "status" to status,
+        "phoneNumber" to phoneNumber,
         "joinedAt" to joinedAt,
+        "addedByUid" to (addedByUid ?: invitedByUid),
+        "invitedByUid" to (invitedByUid ?: addedByUid),
         "displayName" to displayName,
-        "email" to email,
-        "phoneNumber" to phoneNumber
+        "email" to email
     )
 
     companion object {
         fun fromMap(map: Map<String, Any?>): WorkspaceMember {
             return WorkspaceMember(
                 uid = map["uid"] as? String ?: "",
-                role = map["role"] as? String ?: "owner",
+                role = map["role"] as? String ?: "partner",
                 status = map["status"] as? String ?: "active",
+                phoneNumber = map["phoneNumber"] as? String,
                 joinedAt = (map["joinedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                addedByUid = map["addedByUid"] as? String ?: map["invitedByUid"] as? String,
+                invitedByUid = map["invitedByUid"] as? String ?: map["addedByUid"] as? String,
                 displayName = map["displayName"] as? String,
-                email = map["email"] as? String,
-                phoneNumber = map["phoneNumber"] as? String
+                email = map["email"] as? String
+            )
+        }
+    }
+}
+
+@Keep
+data class WorkspaceInvitation(
+    val invitationId: String = "",
+    val workspaceId: String = "",
+    val workspaceName: String = "",
+    val invitedByUid: String = "",
+    val ownerUid: String = "",
+    val ownerName: String = "",
+    val ownerPhone: String = "",
+    val invitedPhoneNumber: String = "",
+    val inviteePhone: String = "",
+    val inviteeName: String = "",
+    val role: String = "partner",
+    val status: String = "pending", // "pending", "accepted", "declined"
+    val acceptedByUid: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+) {
+    fun toMap(): Map<String, Any?> = mapOf(
+        "invitationId" to invitationId,
+        "workspaceId" to workspaceId,
+        "workspaceName" to workspaceName,
+        "invitedByUid" to (invitedByUid.ifBlank { ownerUid }),
+        "ownerUid" to (ownerUid.ifBlank { invitedByUid }),
+        "ownerName" to ownerName,
+        "ownerPhone" to ownerPhone,
+        "invitedPhoneNumber" to (invitedPhoneNumber.ifBlank { inviteePhone }),
+        "inviteePhone" to (inviteePhone.ifBlank { invitedPhoneNumber }),
+        "inviteeName" to inviteeName,
+        "role" to role,
+        "status" to status,
+        "acceptedByUid" to acceptedByUid,
+        "createdAt" to createdAt,
+        "updatedAt" to updatedAt
+    )
+
+    companion object {
+        fun fromMap(map: Map<String, Any?>): WorkspaceInvitation {
+            val invBy = map["invitedByUid"] as? String ?: map["ownerUid"] as? String ?: ""
+            val invPhone = map["invitedPhoneNumber"] as? String ?: map["inviteePhone"] as? String ?: ""
+            return WorkspaceInvitation(
+                invitationId = map["invitationId"] as? String ?: "",
+                workspaceId = map["workspaceId"] as? String ?: "",
+                workspaceName = map["workspaceName"] as? String ?: "",
+                invitedByUid = invBy,
+                ownerUid = map["ownerUid"] as? String ?: invBy,
+                ownerName = map["ownerName"] as? String ?: "",
+                ownerPhone = map["ownerPhone"] as? String ?: "",
+                invitedPhoneNumber = invPhone,
+                inviteePhone = map["inviteePhone"] as? String ?: invPhone,
+                inviteeName = map["inviteeName"] as? String ?: "",
+                role = map["role"] as? String ?: "partner",
+                status = map["status"] as? String ?: "pending",
+                acceptedByUid = map["acceptedByUid"] as? String,
+                createdAt = (map["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                updatedAt = (map["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
+            )
+        }
+    }
+}
+
+@Keep
+data class MemberMigration(
+    val partnerUid: String = "",
+    val sourceWorkspaceId: String = "",
+    val destinationWorkspaceId: String = "",
+    val status: String = "pending", // "pending", "in_progress", "completed", "failed"
+    val startedAt: Long = System.currentTimeMillis(),
+    val completedAt: Long? = null,
+    val recordsMigrated: Int = 0
+) {
+    fun toMap(): Map<String, Any?> = mapOf(
+        "partnerUid" to partnerUid,
+        "sourceWorkspaceId" to sourceWorkspaceId,
+        "destinationWorkspaceId" to destinationWorkspaceId,
+        "status" to status,
+        "startedAt" to startedAt,
+        "completedAt" to completedAt,
+        "recordsMigrated" to recordsMigrated
+    )
+
+    companion object {
+        fun fromMap(map: Map<String, Any?>): MemberMigration {
+            return MemberMigration(
+                partnerUid = map["partnerUid"] as? String ?: "",
+                sourceWorkspaceId = map["sourceWorkspaceId"] as? String ?: "",
+                destinationWorkspaceId = map["destinationWorkspaceId"] as? String ?: "",
+                status = map["status"] as? String ?: "pending",
+                startedAt = (map["startedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                completedAt = (map["completedAt"] as? Number)?.toLong(),
+                recordsMigrated = (map["recordsMigrated"] as? Number)?.toInt() ?: 0
             )
         }
     }

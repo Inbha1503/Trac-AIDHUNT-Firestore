@@ -16,6 +16,8 @@ import com.example.data.entity.WithdrawalEntity
 import com.example.data.firebase.AuthState
 import com.example.data.firebase.UserProfile
 import com.example.data.firebase.Workspace
+import com.example.data.firebase.WorkspaceInvitation
+import com.example.data.firebase.WorkspaceMember
 import com.example.data.network.NetworkMonitor
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.SettingsSyncState
@@ -113,6 +115,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val workspaceInitState: StateFlow<WorkspaceInitState> = workspaceRepository.workspaceInitState
     val activeWorkspaceId: StateFlow<String?> = workspaceRepository.activeWorkspaceId
+    val pendingInvitations: StateFlow<List<WorkspaceInvitation>> = workspaceRepository.pendingInvitations
+    val workspaceMembers: StateFlow<List<WorkspaceMember>> = workspaceRepository.workspaceMembers
+
+    private val _availableWorkspaces = MutableStateFlow<List<Workspace>>(emptyList())
+    val availableWorkspaces: StateFlow<List<Workspace>> = _availableWorkspaces.asStateFlow()
+
+    fun loadAvailableWorkspaces() {
+        val profile = currentUserProfile.value ?: return
+        viewModelScope.launch {
+            val list = workspaceRepository.getAvailableWorkspaces(profile)
+            _availableWorkspaces.value = list
+        }
+    }
+
+    fun switchWorkspace(
+        targetWorkspaceId: String,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        val profile = currentUserProfile.value
+        if (profile == null) {
+            onError("User profile not loaded")
+            return
+        }
+        viewModelScope.launch {
+            _isSyncing.value = true
+            val result = workspaceRepository.switchActiveWorkspace(targetWorkspaceId, profile)
+            _isSyncing.value = false
+            result.onSuccess {
+                loadAvailableWorkspaces()
+                onSuccess()
+            }.onFailure { e ->
+                onError(e.message ?: "Failed to switch workspace")
+            }
+        }
+    }
 
     // Unsynced entity counters scoped by active workspace
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -509,14 +547,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun addPartner(partner: PartnerEntity, onSuccess: () -> Unit = {}) {
+    fun addPartner(
+        partner: PartnerEntity,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
         viewModelScope.launch {
-            try {
-                workspaceRepository.addPartner(partner)
-                onSuccess()
-            } catch (e: Exception) {
-                android.util.Log.w("TRAC_FIRESTORE", "Cloud add partner failed: ${e.message}")
-                onSuccess()
+            _isSyncing.value = true
+            val res = workspaceRepository.addPartnerDirectly(partner.name, partner.phone, partner.role)
+            _isSyncing.value = false
+            when (res) {
+                is WorkspaceRepository.DirectAddPartnerResult.Success -> {
+                    onSuccess()
+                }
+                is WorkspaceRepository.DirectAddPartnerResult.AccountNotRegistered -> {
+                    onError(res.message)
+                }
+                is WorkspaceRepository.DirectAddPartnerResult.Error -> {
+                    onError(res.message)
+                }
+            }
+        }
+    }
+
+    fun addPartnerDirectly(
+        name: String,
+        phone: String,
+        role: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            val res = workspaceRepository.addPartnerDirectly(name, phone, role)
+            _isSyncing.value = false
+            when (res) {
+                is WorkspaceRepository.DirectAddPartnerResult.Success -> {
+                    onResult(true, "Partner connected successfully!")
+                }
+                is WorkspaceRepository.DirectAddPartnerResult.AccountNotRegistered -> {
+                    onResult(false, res.message)
+                }
+                is WorkspaceRepository.DirectAddPartnerResult.Error -> {
+                    onResult(false, res.message)
+                }
             }
         }
     }
@@ -536,9 +609,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deletePartner(partner: PartnerEntity) {
         viewModelScope.launch {
             try {
-                workspaceRepository.deletePartner(partner)
+                workspaceRepository.removePartnerFromWorkspace(partner)
             } catch (e: Exception) {
-                android.util.Log.w("TRAC_FIRESTORE", "Cloud delete partner failed: ${e.message}")
+                android.util.Log.w("TRAC_FIRESTORE", "Delete partner failed: ${e.message}")
             }
         }
     }
@@ -609,6 +682,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val initResult = workspaceRepository.initializeForUser(profile)
                 _isSyncing.value = false
                 initResult.onSuccess {
+                    loadAvailableWorkspaces()
                     onSuccess(profile)
                 }.onFailure { e ->
                     onError(e.message ?: "Workspace initialization failed")
@@ -646,6 +720,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val initResult = workspaceRepository.initializeForUser(profile)
                     _isSyncing.value = false
                     initResult.onSuccess {
+                        loadAvailableWorkspaces()
                         onAutoVerified(profile)
                     }.onFailure { e ->
                         onError(e.message ?: "Workspace initialization failed")
@@ -675,6 +750,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val initResult = workspaceRepository.initializeForUser(profile)
                 _isSyncing.value = false
                 initResult.onSuccess {
+                    loadAvailableWorkspaces()
                     onSuccess(profile)
                 }.onFailure { e ->
                     onError(e.message ?: "Workspace initialization failed")
@@ -684,42 +760,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val e = result.exceptionOrNull()
                 onError(e?.message ?: "Invalid OTP Code")
             }
-        }
-    }
-
-    /**
-     * Fallback / Direct Login for offline testing or pre-configured local partner
-     */
-    fun loginWithOtp(phone: String, otp: String, onComplete: () -> Unit) {
-        viewModelScope.launch {
-            _isSyncing.value = true
-            delay(400)
-            val current = settings.value
-            workspaceRepository.updateSettings(
-                current.copy(
-                    isLoggedIn = true,
-                    activePartnerPhone = phone
-                )
-            )
-            _isSyncing.value = false
-            onComplete()
-        }
-    }
-
-    fun loginWithPartner(partner: PartnerEntity, onComplete: () -> Unit) {
-        viewModelScope.launch {
-            _isSyncing.value = true
-            val current = settings.value
-            workspaceRepository.updateSettings(
-                current.copy(
-                    isLoggedIn = true,
-                    activePartnerName = "${partner.name} (${partner.role})",
-                    activePartnerPhone = partner.phone,
-                    profilePhotoUri = partner.photoUri ?: current.profilePhotoUri
-                )
-            )
-            _isSyncing.value = false
-            onComplete()
         }
     }
 

@@ -43,7 +43,12 @@ class FirebaseAuthService(
             if (FirebaseApp.getApps(context).isEmpty()) {
                 FirebaseApp.initializeApp(context)
             }
-            FirebaseAuth.getInstance()
+            val instance = FirebaseAuth.getInstance()
+            if (com.example.BuildConfig.DEBUG) {
+                instance.firebaseAuthSettings.setAppVerificationDisabledForTesting(true)
+                Log.d("TRAC_AUTH", "DEBUG build: setAppVerificationDisabledForTesting(true)")
+            }
+            instance
         } catch (e: Exception) {
             Log.e(TAG, "Error initializing FirebaseAuth: ${e.message}")
             null
@@ -296,6 +301,7 @@ class FirebaseAuthService(
                 if (user.phoneNumber != null) updateMap["phoneNumber"] = user.phoneNumber
                 if (user.photoUrl != null) updateMap["photoUrl"] = user.photoUrl.toString()
                 userDocRef.set(updateMap, SetOptions.merge()).awaitTask()
+                registerPhoneDirectoryEntry(user)
                 updated
             } else {
                 val canonicalWsId = "ws_${uid.replace(Regex("[^a-zA-Z0-9]"), "").take(16).ifBlank { "main" }}"
@@ -311,6 +317,7 @@ class FirebaseAuthService(
                     updatedAt = System.currentTimeMillis()
                 )
                 userDocRef.set(newProfile.toMap(), SetOptions.merge()).awaitTask()
+                registerPhoneDirectoryEntry(user)
                 newProfile
             }
         } catch (e: Exception) {
@@ -322,6 +329,27 @@ class FirebaseAuthService(
                 phoneNumber = user.phoneNumber,
                 photoUrl = user.photoUrl?.toString()
             )
+        }
+    }
+
+    private suspend fun registerPhoneDirectoryEntry(user: FirebaseUser) {
+        val phone = user.phoneNumber
+        if (phone.isNullOrBlank()) return
+        val db = firestore ?: return
+        val normalizedPhone = normalizePhoneNumber(phone)
+        if (normalizedPhone.isBlank()) return
+        val docData = mapOf(
+            "uid" to user.uid,
+            "phoneNumber" to normalizedPhone,
+            "updatedAt" to System.currentTimeMillis()
+        )
+        try {
+            db.collection("phoneDirectory").document(normalizedPhone)
+                .set(docData, SetOptions.merge())
+                .awaitTask()
+            Log.d("TRAC_PHONE_DIRECTORY", "REGISTER phone=$normalizedPhone uid=${user.uid} SUCCESS")
+        } catch (e: Exception) {
+            Log.w("TRAC_PHONE_DIRECTORY", "REGISTER phone=$normalizedPhone uid=${user.uid} FAILED: ${e.message}")
         }
     }
 

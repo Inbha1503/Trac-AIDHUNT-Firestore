@@ -20,6 +20,9 @@ interface PartnerDao {
     @Query("SELECT * FROM partners WHERE workspaceId = :workspaceId ORDER BY id ASC")
     fun getPartnersForWorkspace(workspaceId: String): Flow<List<PartnerEntity>>
 
+    @Query("SELECT * FROM partners WHERE workspaceId = :workspaceId ORDER BY id ASC")
+    suspend fun getPartnersForWorkspaceOnce(workspaceId: String): List<PartnerEntity>
+
     @Query("SELECT * FROM partners ORDER BY id ASC")
     fun getAllPartners(): Flow<List<PartnerEntity>>
 
@@ -56,6 +59,9 @@ interface TractorDao {
     @Query("SELECT * FROM tractors WHERE workspaceId = :workspaceId ORDER BY id ASC")
     fun getTractorsForWorkspace(workspaceId: String): Flow<List<TractorEntity>>
 
+    @Query("SELECT * FROM tractors WHERE workspaceId = :workspaceId ORDER BY id ASC")
+    suspend fun getTractorsForWorkspaceOnce(workspaceId: String): List<TractorEntity>
+
     @Query("SELECT * FROM tractors ORDER BY id ASC")
     fun getAllTractors(): Flow<List<TractorEntity>>
 
@@ -91,6 +97,9 @@ interface TractorDao {
 interface CustomerDao {
     @Query("SELECT * FROM customers WHERE workspaceId = :workspaceId ORDER BY updatedAt DESC")
     fun getCustomersForWorkspace(workspaceId: String): Flow<List<CustomerEntity>>
+
+    @Query("SELECT * FROM customers WHERE workspaceId = :workspaceId ORDER BY updatedAt DESC")
+    suspend fun getCustomersForWorkspaceOnce(workspaceId: String): List<CustomerEntity>
 
     @Query("SELECT * FROM customers ORDER BY updatedAt DESC")
     fun getAllCustomers(): Flow<List<CustomerEntity>>
@@ -154,6 +163,9 @@ interface CustomerDao {
 interface JobEntryDao {
     @Query("SELECT * FROM job_entries WHERE workspaceId = :workspaceId ORDER BY startTimeMillis DESC")
     fun getJobsForWorkspace(workspaceId: String): Flow<List<JobEntryEntity>>
+
+    @Query("SELECT * FROM job_entries WHERE workspaceId = :workspaceId ORDER BY startTimeMillis DESC")
+    suspend fun getJobsForWorkspaceOnce(workspaceId: String): List<JobEntryEntity>
 
     @Query("SELECT * FROM job_entries ORDER BY startTimeMillis DESC")
     fun getAllJobs(): Flow<List<JobEntryEntity>>
@@ -224,6 +236,9 @@ interface ExpenseDao {
     @Query("SELECT * FROM expenses WHERE workspaceId = :workspaceId ORDER BY dateTimestamp DESC")
     fun getExpensesForWorkspace(workspaceId: String): Flow<List<ExpenseEntity>>
 
+    @Query("SELECT * FROM expenses WHERE workspaceId = :workspaceId ORDER BY dateTimestamp DESC")
+    suspend fun getExpensesForWorkspaceOnce(workspaceId: String): List<ExpenseEntity>
+
     @Query("SELECT * FROM expenses ORDER BY dateTimestamp DESC")
     fun getAllExpenses(): Flow<List<ExpenseEntity>>
 
@@ -274,6 +289,9 @@ interface ExpenseDao {
 interface WithdrawalDao {
     @Query("SELECT * FROM withdrawals WHERE workspaceId = :workspaceId ORDER BY timestamp DESC")
     fun getWithdrawalsForWorkspace(workspaceId: String): Flow<List<WithdrawalEntity>>
+
+    @Query("SELECT * FROM withdrawals WHERE workspaceId = :workspaceId ORDER BY timestamp DESC")
+    suspend fun getWithdrawalsForWorkspaceOnce(workspaceId: String): List<WithdrawalEntity>
 
     @Query("SELECT * FROM withdrawals ORDER BY timestamp DESC")
     fun getAllWithdrawals(): Flow<List<WithdrawalEntity>>

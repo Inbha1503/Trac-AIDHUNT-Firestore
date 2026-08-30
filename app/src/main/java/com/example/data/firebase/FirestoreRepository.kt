@@ -280,6 +280,15 @@ class FirestoreRepository(
         stopRealtimeListeners()
 
         val wsRef = firestore.collection("workspaces").document(workspaceId)
+        val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""
+
+        Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=entries")
+        Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=expenses")
+        Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=customers")
+        Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=tractors")
+        Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=attendees")
+        Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=withdrawals")
+        Log.d("TRAC_FIRESTORE", "LISTEN uid=$currentUid workspace=$workspaceId collection=settings")
 
         // 1. Entries Listener
         entriesListener = wsRef.collection("entries")
@@ -289,6 +298,7 @@ class FirestoreRepository(
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
+                    Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=entries count=${snapshot.documents.size}")
                     val jobs = snapshot.documents.mapNotNull { doc ->
                         doc.data?.let { jobEntryFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
                     }
@@ -304,6 +314,7 @@ class FirestoreRepository(
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
+                    Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=expenses count=${snapshot.documents.size}")
                     val expenses = snapshot.documents.mapNotNull { doc ->
                         doc.data?.let { expenseFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
                     }
@@ -319,6 +330,7 @@ class FirestoreRepository(
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
+                    Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=customers count=${snapshot.documents.size}")
                     val customers = snapshot.documents.mapNotNull { doc ->
                         doc.data?.let { customerFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
                     }
@@ -334,6 +346,7 @@ class FirestoreRepository(
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
+                    Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=tractors count=${snapshot.documents.size}")
                     val tractors = snapshot.documents.mapNotNull { doc ->
                         doc.data?.let { tractorFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
                     }
@@ -349,6 +362,7 @@ class FirestoreRepository(
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
+                    Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=attendees count=${snapshot.documents.size}")
                     val partners = snapshot.documents.mapNotNull { doc ->
                         doc.data?.let { partnerFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
                     }
@@ -364,6 +378,7 @@ class FirestoreRepository(
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
+                    Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=withdrawals count=${snapshot.documents.size}")
                     val withdrawals = snapshot.documents.mapNotNull { doc ->
                         doc.data?.let { withdrawalFromFirestoreMap(it, fallbackId = parseLongId(doc.id), fallbackWorkspaceId = workspaceId) }
                     }
@@ -379,6 +394,7 @@ class FirestoreRepository(
                     return@addSnapshotListener
                 }
                 if (snapshot != null && snapshot.exists()) {
+                    Log.d("TRAC_FIRESTORE", "SNAPSHOT workspace=$workspaceId collection=settings exists=true")
                     snapshot.data?.let { onSettingsUpdated(it, workspaceId) }
                 }
             }
@@ -420,11 +436,13 @@ class FirestoreRepository(
         val firestore = db ?: throw IllegalStateException("FirebaseFirestore instance is null")
         val docId = if (job.id > 0) job.id.toString() else IdGenerator.generateId().toString()
         val path = "workspaces/$workspaceId/entries/$docId"
-        Log.d("TRAC_FIRESTORE", "writing $path with uid=$uid")
+        val currentAuthUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: uid
+        Log.d("TRAC_PARTNER", "SHARED_WRITE authenticatedUid=$currentAuthUid workspace=$workspaceId entryId=$docId")
+        Log.d("TRAC_FIRESTORE", "writing $path with uid=$currentAuthUid")
         try {
             firestore.collection("workspaces").document(workspaceId)
                 .collection("entries").document(docId)
-                .set(job.toFirestoreMap(uid), SetOptions.merge())
+                .set(job.toFirestoreMap(currentAuthUid), SetOptions.merge())
                 .await()
             Log.d("TRAC_FIRESTORE", "SUCCESS entryId=$docId")
         } catch (e: Exception) {
@@ -455,11 +473,13 @@ class FirestoreRepository(
         val firestore = db ?: throw IllegalStateException("FirebaseFirestore instance is null")
         val docId = if (expense.id > 0) expense.id.toString() else IdGenerator.generateId().toString()
         val path = "workspaces/$workspaceId/expenses/$docId"
-        Log.d("TRAC_FIRESTORE", "writing $path with uid=$uid")
+        val currentAuthUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: uid
+        Log.d("TRAC_PARTNER", "SHARED_WRITE authenticatedUid=$currentAuthUid workspace=$workspaceId expenseId=$docId")
+        Log.d("TRAC_FIRESTORE", "writing $path with uid=$currentAuthUid")
         try {
             firestore.collection("workspaces").document(workspaceId)
                 .collection("expenses").document(docId)
-                .set(expense.toFirestoreMap(uid), SetOptions.merge())
+                .set(expense.toFirestoreMap(currentAuthUid), SetOptions.merge())
                 .await()
             Log.d("TRAC_FIRESTORE", "SUCCESS expenseId=$docId")
         } catch (e: Exception) {
@@ -490,11 +510,13 @@ class FirestoreRepository(
         val firestore = db ?: throw IllegalStateException("FirebaseFirestore instance is null")
         val docId = if (customer.id > 0) customer.id.toString() else IdGenerator.generateId().toString()
         val path = "workspaces/$workspaceId/customers/$docId"
-        Log.d("TRAC_FIRESTORE", "writing $path with uid=$uid")
+        val currentAuthUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: uid
+        Log.d("TRAC_PARTNER", "SHARED_WRITE authenticatedUid=$currentAuthUid workspace=$workspaceId customerId=$docId")
+        Log.d("TRAC_FIRESTORE", "writing $path with uid=$currentAuthUid")
         try {
             firestore.collection("workspaces").document(workspaceId)
                 .collection("customers").document(docId)
-                .set(customer.toFirestoreMap(uid), SetOptions.merge())
+                .set(customer.toFirestoreMap(currentAuthUid), SetOptions.merge())
                 .await()
             Log.d("TRAC_FIRESTORE", "SUCCESS customerId=$docId")
         } catch (e: Exception) {
@@ -525,11 +547,13 @@ class FirestoreRepository(
         val firestore = db ?: throw IllegalStateException("FirebaseFirestore instance is null")
         val docId = if (tractor.id > 0) tractor.id.toString() else IdGenerator.generateId().toString()
         val path = "workspaces/$workspaceId/tractors/$docId"
-        Log.d("TRAC_FIRESTORE", "writing $path with uid=$uid")
+        val currentAuthUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: uid
+        Log.d("TRAC_PARTNER", "SHARED_WRITE authenticatedUid=$currentAuthUid workspace=$workspaceId tractorId=$docId")
+        Log.d("TRAC_FIRESTORE", "writing $path with uid=$currentAuthUid")
         try {
             firestore.collection("workspaces").document(workspaceId)
                 .collection("tractors").document(docId)
-                .set(tractor.toFirestoreMap(uid), SetOptions.merge())
+                .set(tractor.toFirestoreMap(currentAuthUid), SetOptions.merge())
                 .await()
             Log.d("TRAC_FIRESTORE", "SUCCESS tractorId=$docId")
         } catch (e: Exception) {
@@ -560,11 +584,12 @@ class FirestoreRepository(
         val firestore = db ?: throw IllegalStateException("FirebaseFirestore instance is null")
         val docId = if (partner.id > 0) partner.id.toString() else IdGenerator.generateId().toString()
         val path = "workspaces/$workspaceId/attendees/$docId"
-        Log.d("TRAC_FIRESTORE", "writing $path with uid=$uid")
+        val currentAuthUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: uid
+        Log.d("TRAC_FIRESTORE", "writing $path with uid=$currentAuthUid")
         try {
             firestore.collection("workspaces").document(workspaceId)
                 .collection("attendees").document(docId)
-                .set(partner.toFirestoreMap(uid), SetOptions.merge())
+                .set(partner.toFirestoreMap(currentAuthUid), SetOptions.merge())
                 .await()
             Log.d("TRAC_FIRESTORE", "SUCCESS partnerId=$docId")
         } catch (e: Exception) {
@@ -595,11 +620,13 @@ class FirestoreRepository(
         val firestore = db ?: throw IllegalStateException("FirebaseFirestore instance is null")
         val docId = if (withdrawal.id > 0) withdrawal.id.toString() else IdGenerator.generateId().toString()
         val path = "workspaces/$workspaceId/withdrawals/$docId"
-        Log.d("TRAC_FIRESTORE", "writing $path with uid=$uid")
+        val currentAuthUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: uid
+        Log.d("TRAC_PARTNER", "SHARED_WRITE authenticatedUid=$currentAuthUid workspace=$workspaceId withdrawalId=$docId")
+        Log.d("TRAC_FIRESTORE", "writing $path with uid=$currentAuthUid")
         try {
             firestore.collection("workspaces").document(workspaceId)
                 .collection("withdrawals").document(docId)
-                .set(withdrawal.toFirestoreMap(uid), SetOptions.merge())
+                .set(withdrawal.toFirestoreMap(currentAuthUid), SetOptions.merge())
                 .await()
             Log.d("TRAC_FIRESTORE", "SUCCESS withdrawalId=$docId")
         } catch (e: Exception) {
@@ -759,7 +786,231 @@ class FirestoreRepository(
         }
     }
 
+    // --- Direct Phone Account Directory & Direct Partner Membership ---
+
+    suspend fun lookupPhoneInDirectory(rawPhone: String): String? {
+        val firestore = db ?: return null
+        val formatted = normalizePhoneNumber(rawPhone)
+        if (formatted.isBlank()) return null
+        val docPath = "phoneDirectory/$formatted"
+        return try {
+            val doc = firestore.collection("phoneDirectory").document(formatted).get().await()
+            if (doc.exists() && doc.data != null) {
+                val partnerUid = doc.getString("uid")
+                if (!partnerUid.isNullOrBlank()) {
+                    Log.d("TRAC_PARTNER", "PHONE_LOOKUP phone=$formatted uid=$partnerUid")
+                    partnerUid
+                } else {
+                    Log.w("TRAC_PARTNER", "PHONE_LOOKUP phone=$formatted NOT_FOUND")
+                    null
+                }
+            } else {
+                Log.w("TRAC_PARTNER", "PHONE_LOOKUP phone=$formatted NOT_FOUND")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("TRAC_PARTNER", "PHONE_LOOKUP phone=$formatted FAILED: ${e.message}", e)
+            null
+        }
+    }
+
+    suspend fun addPartnerMemberDirectly(
+        workspaceId: String,
+        partnerUid: String,
+        partnerName: String,
+        partnerPhone: String,
+        role: String,
+        ownerUid: String,
+        businessName: String
+    ): Result<Unit> {
+        val firestore = db ?: return Result.failure(IllegalStateException("Firestore is not initialized"))
+        val now = System.currentTimeMillis()
+        val formattedPhone = normalizePhoneNumber(partnerPhone)
+
+        return try {
+            val batch = firestore.batch()
+
+            // 1. Create workspace member document: workspaces/{workspaceId}/members/{partnerUid}
+            val memberRef = firestore.collection("workspaces").document(workspaceId)
+                .collection("members").document(partnerUid)
+            val member = WorkspaceMember(
+                uid = partnerUid,
+                role = role.ifBlank { "partner" },
+                status = "active",
+                phoneNumber = formattedPhone,
+                joinedAt = now,
+                addedByUid = ownerUid,
+                invitedByUid = ownerUid,
+                displayName = partnerName.ifBlank { "Partner" }
+            )
+            batch.set(memberRef, member.toMap(), SetOptions.merge())
+
+            // 2. Create user workspace membership discovery index: userWorkspaceMemberships/{partnerUid}/workspaces/{workspaceId}
+            val membershipIndexRef = firestore.collection("userWorkspaceMemberships").document(partnerUid)
+                .collection("workspaces").document(workspaceId)
+            val membershipData = mapOf(
+                "workspaceId" to workspaceId,
+                "ownerUid" to ownerUid,
+                "role" to role.ifBlank { "partner" },
+                "status" to "active",
+                "joinedAt" to now,
+                "workspaceName" to businessName.ifBlank { "AIDHUNT Tractor Fleet" }
+            )
+            batch.set(membershipIndexRef, membershipData, SetOptions.merge())
+
+            // 3. Ensure PartnerEntity is created under workspace attendees for business/operator management
+            val partnerAttendeeRef = firestore.collection("workspaces").document(workspaceId)
+                .collection("attendees").document(partnerUid)
+            val partnerAttendeeId = parseLongId(partnerUid)
+            val partnerAttendee = PartnerEntity(
+                id = partnerAttendeeId,
+                workspaceId = workspaceId,
+                name = partnerName.ifBlank { "Partner" },
+                phone = formattedPhone,
+                role = role.ifBlank { "Partner" },
+                avatarColorHex = "#1E4D2B",
+                isCurrentActive = false
+            )
+            batch.set(partnerAttendeeRef, partnerAttendee.toFirestoreMap(ownerUid), SetOptions.merge())
+
+            batch.commit().await()
+            Log.d("TRAC_PARTNER", "MEMBER_WRITE workspace=$workspaceId partnerUid=$partnerUid SUCCESS")
+            Log.d("TRAC_PARTNER", "INDEX_WRITE workspace=$workspaceId partnerUid=$partnerUid SUCCESS")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            val code = (e as? FirebaseFirestoreException)?.code?.name ?: "ERROR"
+            Log.e("TRAC_PARTNER", "MEMBER_WRITE workspace=$workspaceId partnerUid=$partnerUid FAILED code=$code message=${e.message}", e)
+            Log.e("TRAC_PARTNER", "INDEX_WRITE workspace=$workspaceId partnerUid=$partnerUid FAILED code=$code message=${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getUserWorkspaceMemberships(uid: String): List<Map<String, Any?>> {
+        val firestore = db ?: return emptyList()
+        if (uid.isBlank()) return emptyList()
+
+        return try {
+            val snapshot = firestore.collection("userWorkspaceMemberships").document(uid)
+                .collection("workspaces").get().await()
+            val list = snapshot.documents.mapNotNull { it.data }
+            for (item in list) {
+                val wsId = item["workspaceId"] as? String ?: ""
+                Log.d("TRAC_WORKSPACE", "MEMBERSHIP uid=$uid sharedWorkspace=$wsId")
+            }
+            list
+        } catch (e: Exception) {
+            Log.w("TRAC_WORKSPACE", "Error fetching userWorkspaceMemberships for $uid: ${e.message}")
+            emptyList()
+        }
+    }
+
+    fun listenToUserMemberships(uid: String, onWorkspacesChanged: (List<String>) -> Unit): ListenerRegistration? {
+        val firestore = db ?: return null
+        if (uid.isBlank()) return null
+
+        return try {
+            firestore.collection("userWorkspaceMemberships").document(uid)
+                .collection("workspaces")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.w("TRAC_WORKSPACE", "Listener error on userWorkspaceMemberships: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        val workspaceIds = snapshot.documents.map { it.id }.filter { it.isNotBlank() }
+                        Log.d("TRAC_WORKSPACE", "Membership listener update for $uid: $workspaceIds")
+                        onWorkspacesChanged(workspaceIds)
+                    }
+                }
+        } catch (e: Exception) {
+            Log.w("TRAC_WORKSPACE", "Failed to register membership listener: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun removePartnerFromWorkspace(
+        workspaceId: String,
+        partnerUid: String?,
+        partnerPhone: String
+    ) {
+        val firestore = db ?: return
+        try {
+            // 1. Remove member from workspace
+            if (!partnerUid.isNullOrBlank()) {
+                val memberRef = firestore.collection("workspaces").document(workspaceId)
+                    .collection("members").document(partnerUid)
+                memberRef.delete().await()
+
+                // Delete userWorkspaceMemberships discovery index
+                try {
+                    firestore.collection("userWorkspaceMemberships").document(partnerUid)
+                        .collection("workspaces").document(workspaceId).delete().await()
+                } catch (e: Exception) {
+                    Log.w("TRAC_PARTNER", "Error deleting membership index: ${e.message}")
+                }
+            }
+
+            // 2. Remove partner entity from attendees collection
+            val attendeesSnap = firestore.collection("workspaces").document(workspaceId)
+                .collection("attendees").get().await()
+            val cleanPhone = partnerPhone.filter { it.isDigit() }.takeLast(10)
+            for (doc in attendeesSnap.documents) {
+                val phone = doc.getString("phone") ?: ""
+                val clean = phone.filter { it.isDigit() }.takeLast(10)
+                if (doc.id == partnerUid || (cleanPhone.isNotBlank() && clean == cleanPhone)) {
+                    doc.reference.delete().await()
+                }
+            }
+            Log.d("TRAC_PARTNER", "Partner removed safely from $workspaceId")
+        } catch (e: Exception) {
+            Log.e("TRAC_PARTNER", "Error removing partner from workspace: ${e.message}", e)
+        }
+    }
+
+    suspend fun getWorkspaceDetails(workspaceId: String): Workspace? {
+        val firestore = db ?: return null
+        return try {
+            val doc = firestore.collection("workspaces").document(workspaceId).get().await()
+            if (doc.exists() && doc.data != null) {
+                Workspace.fromMap(doc.data!!)
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun updateUserDefaultWorkspace(uid: String, workspaceId: String) {
+        val firestore = db ?: return
+        try {
+            firestore.collection("users").document(uid).set(
+                mapOf(
+                    "defaultWorkspaceId" to workspaceId,
+                    "updatedAt" to System.currentTimeMillis()
+                ),
+                SetOptions.merge()
+            ).await()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error updating defaultWorkspaceId: ${e.message}")
+        }
+    }
+
+    suspend fun getWorkspaceMembers(workspaceId: String): List<WorkspaceMember> {
+        val firestore = db ?: return emptyList()
+        return try {
+            val snapshot = firestore.collection("workspaces").document(workspaceId)
+                .collection("members")
+                .get()
+                .await()
+            snapshot.documents.mapNotNull { doc ->
+                doc.data?.let { WorkspaceMember.fromMap(it) }
+            }
+        } catch (e: Exception) {
+            Log.w("TRAC_PARTNER", "Error getting members for $workspaceId: ${e.message}")
+            emptyList()
+        }
+    }
+
     private fun parseLongId(idStr: String): Long {
-        return idStr.toLongOrNull() ?: IdGenerator.generateId()
+        return idStr.toLongOrNull() ?: (idStr.hashCode().toLong().let { if (it <= 0) Math.abs(it) + 1L else it })
     }
 }

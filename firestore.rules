@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if the authenticated user is the owner or active member of a workspace
+    function isWorkspaceMember(workspaceId) {
+      return request.auth != null && (
+        request.auth.uid == get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerUid ||
+        exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid))
+      );
+    }
+
+    // Users collection - each user can only read/write their own profile
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Phone Account Directory - exact document lookup only (no list enumeration)
+    match /phoneDirectory/{phoneNumber} {
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow create, update: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
+    // User Workspace Memberships - direct discovery index
+    match /userWorkspaceMemberships/{userId}/workspaces/{workspaceId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create, update, delete: if request.auth != null && (
+        request.auth.uid == userId ||
+        request.auth.uid == get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerUid
+      );
+    }
+    
+    // Workspace root document
+    match /workspaces/{workspaceId} {
+      allow read: if request.auth != null && (
+        resource == null ||
+        resource.data.ownerUid == request.auth.uid ||
+        exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid))
+      );
+      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if request.auth != null && (
+        resource.data.ownerUid == request.auth.uid ||
+        exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid))
+      );
+
+      // Members subcollection
+      match /members/{memberId} {
+        allow read: if isWorkspaceMember(workspaceId);
+        allow create, update: if request.auth != null && (isWorkspaceMember(workspaceId) || request.auth.uid == memberId);
+        allow delete: if request.auth != null && (
+          get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerUid == request.auth.uid ||
+          request.auth.uid == memberId
+        );
+      }
+
+      // Settings subcollection
+      match /settings/{docId} {
+        allow read, write: if isWorkspaceMember(workspaceId);
+      }
+
+      // Attendees subcollection
+      match /attendees/{docId} {
+        allow read, write: if isWorkspaceMember(workspaceId);
+      }
+
+      // Business Data subcollections (entries, expenses, customers, tractors, withdrawals)
+      match /entries/{entryId} {
+        allow read, write: if isWorkspaceMember(workspaceId);
+      }
+
+      match /expenses/{expenseId} {
+        allow read, write: if isWorkspaceMember(workspaceId);
+      }
+
+      match /customers/{customerId} {
+        allow read, write: if isWorkspaceMember(workspaceId);
+      }
+
+      match /tractors/{tractorId} {
+        allow read, write: if isWorkspaceMember(workspaceId);
+      }
+
+      match /withdrawals/{withdrawalId} {
+        allow read, write: if isWorkspaceMember(workspaceId);
+      }
+    }
+  }
+}
+

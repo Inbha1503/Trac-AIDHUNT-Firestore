@@ -81,6 +81,10 @@ fun MainAppContent(
     val unsyncedCustomersCount by viewModel.unsyncedCustomersCount.collectAsState()
     val simulatedOffline by viewModel.simulatedOffline.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
+    val pendingInvitations by viewModel.pendingInvitations.collectAsState()
+    val availableWorkspaces by viewModel.availableWorkspaces.collectAsState()
+    val activeWorkspaceId by viewModel.activeWorkspaceId.collectAsState()
+    val workspaceMembers by viewModel.workspaceMembers.collectAsState()
 
     // Handle Hardware Back Button
     BackHandler(enabled = currentTab == BottomTab.REPORT && currentReportSubPage != ReportSubPage.MENU) {
@@ -202,11 +206,7 @@ fun MainAppContent(
         val authError = (authState as? com.example.data.firebase.AuthState.Error)?.message
         LoginScreen(
             partners = partners,
-            onLoginSuccess = { phone, otp ->
-                viewModel.loginWithOtp(phone, otp) {
-                    onShowToast(if (isTamil) "பகிரப்பட்ட கணக்கில் உள்நுழைந்தது" else "Logged in successfully")
-                }
-            },
+            onLoginSuccess = { _, _ -> },
             onGoogleSignInRequested = {
                 viewModel.signInWithGoogle(
                     context = context,
@@ -240,21 +240,11 @@ fun MainAppContent(
                         onShowToast(if (isTamil) "உள்நுழைவு வெற்றிகரமானது" else "Logged in successfully")
                     },
                     onError = { err ->
-                        if (otpCode == "8890") {
-                            viewModel.loginWithOtp(settings.activePartnerPhone.ifBlank { "9842154321" }, "8890") {
-                                onShowToast(if (isTamil) "உள்நுழைவு வெற்றிகரமானது (டெமோ)" else "Logged in successfully")
-                            }
-                        } else {
-                            onShowToast(err)
-                        }
+                        onShowToast(err)
                     }
                 )
             },
-            onQuickPartnerSelected = { partner ->
-                viewModel.loginWithPartner(partner) {
-                    onShowToast(if (isTamil) "பங்குதாரர் கணக்கில் உள்நுழைந்தது: ${partner.name}" else "Logged in as ${partner.name}")
-                }
-            },
+            onQuickPartnerSelected = null,
             onGmailLoginRequested = { email ->
                 viewModel.signInWithGoogle(
                     context = context,
@@ -421,6 +411,15 @@ fun MainAppContent(
                                 unsyncedWithdrawalsCount = unsyncedWithdrawalsCount,
                                 unsyncedCustomersCount = unsyncedCustomersCount,
                                 totalUnsyncedCount = totalUnsyncedCount,
+                                pendingInvitations = pendingInvitations,
+                                availableWorkspaces = availableWorkspaces,
+                                workspaceMembers = workspaceMembers,
+                                activeWorkspaceId = activeWorkspaceId,
+                                onSwitchWorkspace = { wsId ->
+                                    viewModel.switchWorkspace(wsId) {
+                                        onShowToast(if (isTamil) "கணக்கு இடம் மாற்றப்பட்டது" else "Switched active workspace")
+                                    }
+                                },
                                 isSimulatedOffline = simulatedOffline,
                                 onToggleSimulatedOffline = { viewModel.toggleSimulatedOffline(it) },
                                 onTriggerSync = {
@@ -436,8 +435,16 @@ fun MainAppContent(
                                     viewModel.deleteTractor(it)
                                     onShowToast(if (isTamil) "டிராக்டர் நீக்கப்பட்டது" else "Tractor deleted")
                                 },
-                                onAddPartner = {
-                                    viewModel.addPartner(it) { onShowToast(if (isTamil) "பங்குதாரர் சேர்க்கப்பட்டார்" else "Partner added") }
+                                onAddPartner = { partner ->
+                                    viewModel.addPartner(
+                                        partner = partner,
+                                        onSuccess = {
+                                            onShowToast(if (isTamil) "பங்குதாரர் வெற்றிகரமாக இணைக்கப்பட்டார்!" else "Partner connected successfully!")
+                                        },
+                                        onError = { err ->
+                                            onShowToast(err)
+                                        }
+                                    )
                                 },
                                 onUpdatePartner = {
                                     viewModel.updatePartner(it) { onShowToast(if (isTamil) "பங்குதாரர் புதுப்பிக்கப்பட்டார்" else "Partner updated") }

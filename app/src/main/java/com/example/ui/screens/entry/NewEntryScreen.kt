@@ -736,7 +736,7 @@ fun NewEntryScreen(
                                     val digitsOnly = input.filter { it.isDigit() }.take(10)
                                     onUpdateDraft(draft.copy(customerPhoneInput = digitsOnly))
                                 },
-                                label = { Text(if (isTamil) "கைபேசி எண் *" else "Mobile Number *") },
+                                label = { Text(if (isTamil) "தொலைபேசி எண் (10 இலக்கங்கள்) *" else "Phone Number (10 Digits) *") },
                                 leadingIcon = {
                                     Icon(
                                         Icons.Default.Phone,

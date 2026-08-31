@@ -470,7 +470,17 @@ fun AccountMainDashboard(
                             )
                         )
                 ) {
-
+                    // Right Background Tractor Hero Art
+                    Image(
+                        painter = painterResource(id = R.drawable.account_tractor_hero),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        alpha = 0.85f,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .size(width = 180.dp, height = 150.dp)
+                            .clip(RoundedCornerShape(topEnd = 18.dp, bottomEnd = 18.dp))
+                    )
 
                     Column(
                         modifier = Modifier

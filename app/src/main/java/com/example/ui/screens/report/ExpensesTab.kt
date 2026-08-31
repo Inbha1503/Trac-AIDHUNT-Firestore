@@ -395,7 +395,7 @@ fun ExpenseReportListScreen(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Add Expense",
+                        text = "+ Add Expense",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp
@@ -647,7 +647,7 @@ fun ExpenseReportListScreen(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Search expenses", fontSize = 13.sp, color = Color(0xFF9CA3AF)) },
+                placeholder = { Text("Search description, type, operator...", fontSize = 13.sp, color = Color(0xFF9CA3AF)) },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Search,
@@ -969,11 +969,10 @@ fun StatCard(
             Spacer(modifier = Modifier.height(5.dp))
             Text(
                 text = value,
-                fontSize = 12.5.sp,
+                fontSize = 13.5.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF111827),
                 maxLines = 1,
-                softWrap = false,
                 overflow = TextOverflow.Ellipsis
             )
         }
@@ -1227,7 +1226,7 @@ fun AddOrEditExpenseScreen(
     ) {
         // Top Navigation Bar
         Surface(
-            color = com.example.ui.theme.DeepSageGreen,
+            color = Color(0xFF166534), // Dark Emerald Header
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(

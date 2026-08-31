@@ -164,6 +164,7 @@ fun AccountScreen(
     pendingInvitations: List<WorkspaceInvitation> = emptyList(),
     availableWorkspaces: List<Workspace> = emptyList(),
     workspaceMembers: List<com.example.data.firebase.WorkspaceMember> = emptyList(),
+    isCollaborationOwner: Boolean = true,
     activeWorkspaceId: String? = null,
     onSwitchWorkspace: (String) -> Unit = {},
     onAcceptInvitation: (WorkspaceInvitation) -> Unit = {},
@@ -223,6 +224,7 @@ fun AccountScreen(
                     partners = partners,
                     activePartnerName = settings.activePartnerName,
                     workspaceMembers = workspaceMembers,
+                    isCollaborationOwner = isCollaborationOwner,
                     pendingInvitations = pendingInvitations,
                     onAcceptInvitation = onAcceptInvitation,
                     onDeclineInvitation = onDeclineInvitation,
@@ -559,51 +561,52 @@ fun AccountMainDashboard(
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
 
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Call,
-                                        contentDescription = null,
-                                        tint = Color(0xFF166534),
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Text(
-                                        text = if (settings.businessPhone.isNotBlank()) settings.businessPhone else if (settings.activePartnerPhone.isNotBlank()) settings.activePartnerPhone else "7418497079",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFF1B382B)
-                                    )
+                                val displayPhone = if (settings.businessPhone.isNotBlank()) settings.businessPhone else settings.activePartnerPhone
+                                if (displayPhone.isNotBlank()) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Call,
+                                            contentDescription = null,
+                                            tint = Color(0xFF166534),
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = displayPhone,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF1B382B),
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
 
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.LocationOn,
-                                        contentDescription = null,
-                                        tint = Color(0xFF166534),
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Text(
-                                        text = "Sundaram, Red Hills,",
-                                        fontSize = 12.sp,
-                                        color = Color(0xFF2C4336),
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1
-                                    )
+                                if (settings.businessAddress.isNotBlank()) {
+                                    Row(
+                                        verticalAlignment = Alignment.Top,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.LocationOn,
+                                            contentDescription = null,
+                                            tint = Color(0xFF166534),
+                                            modifier = Modifier
+                                                .padding(top = 2.dp)
+                                                .size(13.dp)
+                                        )
+                                        Text(
+                                            text = settings.businessAddress,
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF2C4336),
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 2,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
-
-                                Text(
-                                    text = "Chennai, Tamilnadu - 600052",
-                                    fontSize = 11.5.sp,
-                                    color = Color(0xFF425C4D),
-                                    modifier = Modifier.padding(start = 17.dp),
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                )
                             }
                         }
 
@@ -1856,7 +1859,7 @@ fun UserGuideDialog(
                         color = Color(0xFF166534)
                     )
                     Text(
-                        text = if (isTamil) "அனைத்து பதிவுகளும் சுந்தரம், அண்ணாதுரை மற்றும் 3வது பங்குதாரர் தொலைபேசிகளுடன் ஒத்திசைக்கப்படும்." else "All jobs, diesel slips, and partner withdrawals sync automatically across Sundaram, Annadurai, and 3rd partner phones.",
+                        text = if (isTamil) "அனைத்து பதிவுகளும் இணைக்கப்பட்ட அனைத்து பங்குதாரர் தொலைபேசிகளுடன் ஒத்திசைக்கப்படும்." else "All jobs, diesel slips, and partner withdrawals sync automatically across all connected partner phones.",
                         fontSize = 11.5.sp,
                         color = Color(0xFF374151)
                     )
@@ -2433,6 +2436,7 @@ fun ManagePartnersPage(
     partners: List<PartnerEntity>,
     activePartnerName: String,
     workspaceMembers: List<com.example.data.firebase.WorkspaceMember> = emptyList(),
+    isCollaborationOwner: Boolean = true,
     pendingInvitations: List<WorkspaceInvitation> = emptyList(),
     onAcceptInvitation: (WorkspaceInvitation) -> Unit = {},
     onDeclineInvitation: (WorkspaceInvitation) -> Unit = {},
@@ -2446,37 +2450,120 @@ fun ManagePartnersPage(
     var partnerToEdit by remember { mutableStateOf<PartnerEntity?>(null) }
     var partnerToDelete by remember { mutableStateOf<PartnerEntity?>(null) }
 
+    val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+    val myPhoneClean = settings.activePartnerPhone.filter { it.isDigit() }.takeLast(10)
+    val myName = settings.activePartnerName.trim()
+
+    // Filter out the logged-in user so they NEVER see themselves as their own partner
+    val filteredLocalPartners = partners.filter { partner ->
+        val pPhoneClean = partner.phone.filter { it.isDigit() }.takeLast(10)
+        val isSelfPhone = myPhoneClean.isNotBlank() && pPhoneClean == myPhoneClean
+        val isSelfName = myName.isNotBlank() && partner.name.trim().equals(myName, ignoreCase = true)
+        !isSelfPhone && !isSelfName
+    }
+
+    // Also include connected members from workspaceMembers that are not in local partners list
+    val extraConnectedPartners = workspaceMembers.filter { member ->
+        val memberPhoneClean = member.phoneNumber?.filter { it.isDigit() }?.takeLast(10) ?: ""
+        val isSelf = (currentUid != null && member.uid == currentUid) ||
+                (myPhoneClean.isNotBlank() && memberPhoneClean == myPhoneClean)
+        val alreadyInLocal = filteredLocalPartners.any { p ->
+            val pClean = p.phone.filter { it.isDigit() }.takeLast(10)
+            pClean.isNotBlank() && pClean == memberPhoneClean
+        }
+        !isSelf && !alreadyInLocal
+    }.map { member ->
+        PartnerEntity(
+            id = member.uid.hashCode().toLong(),
+            workspaceId = settings.workspaceId,
+            name = member.displayName?.ifBlank { null } ?: (if (isTamil) "இணைக்கப்பட்ட பங்குதாரர்" else "Connected Partner"),
+            phone = member.phoneNumber ?: "",
+            role = if (isTamil) "பங்குதாரர்" else "Partner"
+        )
+    }
+
+    val allDisplayedPartners = filteredLocalPartners + extraConnectedPartners
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
-            Button(
-                onClick = { showAddDialog = true },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("btn_add_partner"),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = DeepSageGreen)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(if (isTamil) "புதிய பங்குதாரர் சேர்க்க" else "Add Business Partner", fontWeight = FontWeight.Bold)
+        if (isCollaborationOwner) {
+            item {
+                Button(
+                    onClick = { showAddDialog = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("btn_add_partner"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = DeepSageGreen)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(if (isTamil) "புதிய பங்குதாரர் சேர்க்க" else "Add Business Partner", fontWeight = FontWeight.Bold)
+                }
             }
         }
 
-        items(partners, key = { it.id }) { partner ->
-            val isCurrent = partner.name.equals(activePartnerName, ignoreCase = true)
-            val cleanPhone = partner.phone.filter { ch -> ch.isDigit() }.takeLast(10)
-            val isConnected = workspaceMembers.any { member ->
-                member.phoneNumber?.filter { ch -> ch.isDigit() }?.takeLast(10) == cleanPhone
+        if (allDisplayedPartners.isEmpty()) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = BorderStroke(1.dp, SageOutline.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.People,
+                            contentDescription = null,
+                            tint = DeepSageGreen.copy(alpha = 0.6f),
+                            modifier = Modifier.size(44.dp)
+                        )
+                        Text(
+                            text = if (isTamil) "பங்குதாரர்கள் சேர்க்கப்படவில்லை" else "No Partners Added Yet",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ForestGreenHeader
+                        )
+                        Text(
+                            text = if (isTamil)
+                                "உங்கள் கூட்டாளியின் பதிவு செய்யப்பட்ட தொலைபேசி எண்ணை உள்ளிட்டு அவர்களை உடனடியாக இணைக்கவும்."
+                            else
+                                "Add your business partner using their registered phone number to automatically synchronize records.",
+                            fontSize = 12.sp,
+                            color = TextSecondaryDark,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
             }
+        }
+
+        items(allDisplayedPartners, key = { "${it.id}_${it.phone}" }) { partner ->
+            val cleanPhone = partner.phone.filter { ch -> ch.isDigit() }.takeLast(10)
+            val matchedMember = workspaceMembers.find { member ->
+                val mClean = member.phoneNumber?.filter { ch -> ch.isDigit() }?.takeLast(10) ?: ""
+                mClean.isNotBlank() && mClean == cleanPhone
+            }
+            val isConnected = matchedMember != null
+
+            // Clean resolved name
+            val resolvedDisplayName = matchedMember?.displayName?.ifBlank { null }
+                ?: partner.name.ifBlank { partner.phone }
+            val roleLabel = if (isTamil) "பங்குதாரர்" else "Partner"
 
             Card(
                 shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = if (isCurrent) SoftSageGreen.copy(alpha = 0.5f) else Color.White),
-                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(if (isCurrent) DeepSageGreen else SageOutline.copy(alpha = 0.6f))),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(SageOutline.copy(alpha = 0.6f))),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -2488,24 +2575,24 @@ fun ManagePartnersPage(
                 ) {
                     PartnerAvatarImage(
                         photoUri = partner.photoUri,
-                        name = partner.name,
+                        name = resolvedDisplayName,
                         size = 44.dp,
-                        avatarColorHex = if (isCurrent) "#1E4D2B" else "#3B5323"
+                        avatarColorHex = "#1E4D2B"
                     )
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = partner.name,
+                            text = resolvedDisplayName,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = ForestGreenHeader
                         )
                         Text(
-                            text = "${partner.role} • ${partner.phone}",
+                            text = "$roleLabel • ${partner.phone}",
                             fontSize = 12.sp,
                             color = TextSecondaryDark
                         )
-                        if (isCurrent || isConnected) {
+                        if (isConnected) {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
                                 color = Color(0xFFE8F5E9),
@@ -2538,13 +2625,13 @@ fun ManagePartnersPage(
                         }
                     }
 
-                    Row {
-                        IconButton(onClick = { partnerToEdit = partner }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Edit", tint = DeepSageGreen, modifier = Modifier.size(20.dp))
-                        }
-                        if (partners.size > 1) {
+                    if (isCollaborationOwner) {
+                        Row {
+                            IconButton(onClick = { partnerToEdit = partner }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = DeepSageGreen, modifier = Modifier.size(20.dp))
+                            }
                             IconButton(onClick = { partnerToDelete = partner }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = TextMutedDark, modifier = Modifier.size(20.dp))
+                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = AlertDueRed, modifier = Modifier.size(20.dp))
                             }
                         }
                     }
@@ -2577,7 +2664,14 @@ fun ManagePartnersPage(
         AlertDialog(
             onDismissRequest = { partnerToDelete = null },
             title = { Text(if (isTamil) "பங்குதாரரை நீக்கவா?" else "Remove Partner?", fontWeight = FontWeight.Bold, color = ForestGreenHeader) },
-            text = { Text(if (isTamil) "'${partner.name}' பங்குதாரரை நிச்சயமாக நீக்க விரும்புகிறீர்களா?" else "Are you sure you want to remove '${partner.name}' from the shared account?") },
+            text = {
+                Text(
+                    if (isTamil)
+                        "'${partner.name}' பங்குதாரரை நிச்சயமாக நீக்க விரும்புகிறீர்களா? இவர்கள் இனி பகிரப்பட்ட பதிவுகளை பார்க்க முடியாது."
+                    else
+                        "Are you sure you want to remove '${partner.name}' from this shared business? They will no longer share entries and records."
+                )
+            },
             confirmButton = {
                 Button(
                     onClick = {

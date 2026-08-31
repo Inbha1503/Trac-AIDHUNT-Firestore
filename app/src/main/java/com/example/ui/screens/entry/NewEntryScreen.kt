@@ -184,8 +184,9 @@ fun NewEntryScreen(
     val hasAttemptedReview = draft.hasAttemptedReview
     var showClearConfirmationDialog by remember { mutableStateOf(false) }
 
-    val isTractorInvalid = selectedTractor.isBlank()
+    val isTractorInvalid = selectedTractor.isBlank() || (tractors.isNotEmpty() && tractors.none { it.label == selectedTractor })
     val isCustomerNameInvalid = customerNameInput.isBlank()
+    val isCustomerPhoneInvalid = customerPhoneInput.length != 10 || !customerPhoneInput.all { it.isDigit() }
     val isTimeInvalid = computedDurationMinutes <= 0L
     val isWorkAmountInvalid = (customWorkAmountInput.isNotBlank() && (customWorkAmountInput.toDoubleOrNull() ?: 0.0) <= 0.0) ||
             (customWorkAmountInput.isBlank() && calculatedWorkAmount <= 0.0)
@@ -325,30 +326,30 @@ fun NewEntryScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(if (responsive.isSmallPhone) 10.dp else 14.dp)
         ) {
-            // Header Bar: Title with Visible Clear Button
+            // Action Bar: Clear/Reset Draft Button & Unsaved Draft Indicator
             item {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                        .padding(vertical = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(
-                            text = if (isTamil) "புதிய வேலை பதிவு" else "New Entry",
-                            fontSize = if (responsive.isSmallPhone) 18.sp else 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ForestGreenHeader
-                        )
-                        if (draft.isModified()) {
+                    if (draft.isModified()) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = EarthGold.copy(alpha = 0.15f)
+                        ) {
                             Text(
                                 text = if (isTamil) "சேமிக்கப்படாத வரைவு (Draft)" else "Unsaved Draft",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = EarthGold
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = EarthGold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
+                    } else {
+                        Spacer(modifier = Modifier.width(1.dp))
                     }
 
                     OutlinedButton(
@@ -358,7 +359,7 @@ fun NewEntryScreen(
                         border = androidx.compose.foundation.BorderStroke(1.dp, AlertDueRed.copy(alpha = 0.4f)),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                         modifier = Modifier
-                            .height(36.dp)
+                            .height(34.dp)
                             .testTag("btn_clear_header")
                     ) {
                         Icon(
@@ -369,7 +370,7 @@ fun NewEntryScreen(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (isTamil) "அழி" else "Clear",
+                            text = if (isTamil) "அழி" else "Clear Draft",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = AlertDueRed
@@ -490,27 +491,51 @@ fun NewEntryScreen(
                         }
 
                         // Tractor Dropdown with Lock Icon
+                        val tractorDisplayText = if (tractors.isEmpty()) {
+                            if (isTamil) "டிராக்டர் எதுவும் சேர்க்கப்படவில்லை" else "No tractor added"
+                        } else {
+                            selectedTractor
+                        }
+
                         ExposedDropdownMenuBox(
                             expanded = tractorDropdownExpanded,
-                            onExpandedChange = { tractorDropdownExpanded = !tractorDropdownExpanded }
+                            onExpandedChange = {
+                                if (tractors.isNotEmpty()) {
+                                    tractorDropdownExpanded = !tractorDropdownExpanded
+                                }
+                            }
                         ) {
                             OutlinedTextField(
-                                value = selectedTractor,
+                                value = tractorDisplayText,
                                 onValueChange = {},
                                 readOnly = true,
-                                isError = hasAttemptedReview && isTractorInvalid,
+                                isError = hasAttemptedReview && (isTractorInvalid || tractors.isEmpty()),
                                 supportingText = {
-                                    if (hasAttemptedReview && isTractorInvalid) {
-                                        Text(if (isTamil) "டிராக்டர் தேர்வு செய்க" else "This field is required", color = AlertDueRed, fontSize = 11.sp)
+                                    if (tractors.isEmpty()) {
+                                        Text(
+                                            text = if (isTamil) "முதலில் ஒரு டிராக்டரைச் சேர்க்கவும்" else "Please add a tractor before creating an entry.",
+                                            color = AlertDueRed,
+                                            fontSize = 11.sp
+                                        )
+                                    } else if (hasAttemptedReview && isTractorInvalid) {
+                                        Text(
+                                            text = if (isTamil) "டிராக்டர் தேர்வு செய்க" else "Please select a tractor",
+                                            color = AlertDueRed,
+                                            fontSize = 11.sp
+                                        )
                                     }
                                 },
                                 label = { Text(if (isTamil) "டிராக்டர் தேர்வு செய்க *" else "Select Tractor *") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tractorDropdownExpanded) },
+                                trailingIcon = {
+                                    if (tractors.isNotEmpty()) {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = tractorDropdownExpanded)
+                                    }
+                                },
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.Agriculture,
                                         contentDescription = null,
-                                        tint = if (hasAttemptedReview && isTractorInvalid) AlertDueRed else DeepSageGreen
+                                        tint = if (hasAttemptedReview && (isTractorInvalid || tractors.isEmpty())) AlertDueRed else DeepSageGreen
                                     )
                                 },
                                 modifier = Modifier
@@ -519,21 +544,23 @@ fun NewEntryScreen(
                                     .testTag("entry_tractor_dropdown"),
                                 shape = RoundedCornerShape(10.dp)
                             )
-                            ExposedDropdownMenu(
-                                expanded = tractorDropdownExpanded,
-                                onDismissRequest = { tractorDropdownExpanded = false }
-                            ) {
-                                tractors.forEach { t ->
-                                    DropdownMenuItem(
-                                        text = { Text("${t.label} • ${t.modelYear}") },
-                                        onClick = {
-                                            onUpdateDraft(draft.copy(selectedTractor = t.label))
-                                            tractorDropdownExpanded = false
-                                            if (isTractorLocked) {
-                                                onUpdateLockedTractor?.invoke(t.label)
+                            if (tractors.isNotEmpty()) {
+                                ExposedDropdownMenu(
+                                    expanded = tractorDropdownExpanded,
+                                    onDismissRequest = { tractorDropdownExpanded = false }
+                                ) {
+                                    tractors.forEach { t ->
+                                        DropdownMenuItem(
+                                            text = { Text("${t.label} • ${t.modelYear}") },
+                                            onClick = {
+                                                onUpdateDraft(draft.copy(selectedTractor = t.label))
+                                                tractorDropdownExpanded = false
+                                                if (isTractorLocked) {
+                                                    onUpdateLockedTractor?.invoke(t.label)
+                                                }
                                             }
-                                        }
-                                    )
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -703,26 +730,34 @@ fun NewEntryScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            val cleanDigits = sanitizePhoneNumberForStorage(customerPhoneInput)
-                            val isPhoneInvalid = customerPhoneInput.isNotBlank() && cleanDigits.length !in 10..12
-
                             OutlinedTextField(
                                 value = customerPhoneInput,
-                                onValueChange = { onUpdateDraft(draft.copy(customerPhoneInput = it)) },
-                                label = { Text(if (isTamil) "தொலைபேசி எண்" else "Phone Number") },
-                                leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = SageAccent) },
+                                onValueChange = { input ->
+                                    val digitsOnly = input.filter { it.isDigit() }.take(10)
+                                    onUpdateDraft(draft.copy(customerPhoneInput = digitsOnly))
+                                },
+                                label = { Text(if (isTamil) "தொலைபேசி எண் (10 இலக்கங்கள்) *" else "Phone Number (10 Digits) *") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Phone,
+                                        contentDescription = null,
+                                        tint = if (hasAttemptedReview && isCustomerPhoneInvalid) AlertDueRed else SageAccent
+                                    )
+                                },
                                 singleLine = true,
-                                isError = isPhoneInvalid,
+                                isError = hasAttemptedReview && isCustomerPhoneInvalid,
                                 supportingText = {
-                                    if (customerPhoneInput.isNotBlank()) {
-                                        if (isPhoneInvalid) {
-                                            Text("10-digit number required", color = AlertDueRed, fontSize = 10.sp)
-                                        } else {
-                                            Text("WhatsApp: +91 $cleanDigits", color = SuccessPaidGreen, fontSize = 10.sp)
-                                        }
+                                    if (hasAttemptedReview && isCustomerPhoneInvalid) {
+                                        Text(
+                                            text = if (isTamil) "சரியான 10 இலக்க தொலைபேசி எண் தேவை" else "Enter a valid 10-digit mobile number",
+                                            color = AlertDueRed,
+                                            fontSize = 10.sp
+                                        )
+                                    } else if (customerPhoneInput.length == 10) {
+                                        Text("WhatsApp: +91 $customerPhoneInput", color = SuccessPaidGreen, fontSize = 10.sp)
                                     }
                                 },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("entry_customer_phone_input"),
@@ -1235,8 +1270,17 @@ fun NewEntryScreen(
                 Button(
                     onClick = {
                         onUpdateDraft(draft.copy(hasAttemptedReview = true))
+                        if (tractors.isEmpty()) {
+                            Toast.makeText(
+                                context,
+                                if (isTamil) "முதலில் ஒரு டிராக்டரைச் சேர்க்கவும்" else "Please add a tractor before creating an entry.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return@Button
+                        }
                         val isFormValid = !isTractorInvalid &&
                                 !isCustomerNameInvalid &&
+                                !isCustomerPhoneInvalid &&
                                 !isTimeInvalid &&
                                 !isWorkAmountInvalid &&
                                 !isAmountReceivedInvalid &&
@@ -1245,11 +1289,16 @@ fun NewEntryScreen(
                         if (isFormValid) {
                             onUpdateDraft(draft.copy(isReviewScreenVisible = true, hasAttemptedReview = true))
                         } else {
-                            Toast.makeText(
-                                context,
-                                if (isTamil) "தேவையான தகவல்களை நிரப்பவும்" else "Please fill all required highlighted fields",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            val errorMsg = when {
+                                isTractorInvalid -> if (isTamil) "டிராக்டரைத் தேர்வுசெய்க" else "Please select a tractor"
+                                isCustomerNameInvalid -> if (isTamil) "வாடிக்கையாளர் பெயர் தேவை" else "Customer name is required"
+                                isCustomerPhoneInvalid -> if (isTamil) "சரியான 10 இலக்க தொலைபேசி எண்ணை உள்ளிடவும்" else "Enter a valid 10-digit mobile number"
+                                isTimeInvalid -> if (isTamil) "வேலை நேரம் பூஜ்ஜியத்திற்கு மேல் இருக்க வேண்டும்" else "Work duration must be greater than 0"
+                                isWorkAmountInvalid -> if (isTamil) "வேலைத் தொகை பூஜ்ஜியத்திற்கு மேல் இருக்க வேண்டும்" else "Work amount must be greater than 0"
+                                isAmountReceivedInvalid -> if (isTamil) "பெறப்பட்ட தொகையை உள்ளிடவும்" else "Please enter amount received"
+                                else -> if (isTamil) "தேவையான தகவல்களை நிரப்பவும்" else "Please fill all required highlighted fields"
+                            }
+                            Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
                         }
                     },
                     shape = RoundedCornerShape(14.dp),

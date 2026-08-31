@@ -522,7 +522,7 @@ fun JobEntryItemCard(
                     )
                 }
 
-                // 2. Customer Name with #ID badge on the left & Phone
+                // 2. Customer Name with Compact #ID badge & Work Type / Phone
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -541,28 +541,47 @@ fun JobEntryItemCard(
                             modifier = Modifier.weight(1f, fill = false)
                         )
 
+                        val compactId = if (job.id.toString().length > 6) "#${job.id.toString().takeLast(6)}" else "#${job.id}"
                         Surface(
                             shape = RoundedCornerShape(4.dp),
                             color = Color(0xFFDCFCE7)
                         ) {
                             Text(
-                                text = "#${job.id}",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
+                                text = compactId,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFF166534),
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                             )
                         }
                     }
 
-                    if (job.customerPhone.isNotBlank()) {
-                        Text(
-                            text = job.customerPhone,
-                            fontSize = if (responsive.isSmallPhone) 12.5.sp else 13.sp,
-                            color = Color(0xFF4B5563),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (job.workType.isNotBlank()) {
+                            Text(
+                                text = job.workType,
+                                fontSize = if (responsive.isSmallPhone) 11.5.sp else 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = DeepSageGreen,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (job.customerPhone.isNotBlank()) {
+                                Text(text = "•", color = Color(0xFFD1D5DB), fontSize = 10.sp)
+                            }
+                        }
+                        if (job.customerPhone.isNotBlank()) {
+                            Text(
+                                text = job.customerPhone,
+                                fontSize = if (responsive.isSmallPhone) 11.5.sp else 12.sp,
+                                color = Color(0xFF4B5563),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
 
@@ -664,7 +683,7 @@ fun JobEntryItemCard(
                             modifier = Modifier.size(13.5.dp)
                         )
                         Text(
-                            text = job.tractorLabel.ifBlank { "Mahindra 575 DI" },
+                            text = job.tractorLabel.ifBlank { "—" },
                             fontSize = if (responsive.isSmallPhone) 11.5.sp else 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = Color(0xFF4B5563),

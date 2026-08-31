@@ -1,5 +1,6 @@
 package com.example.ui.screens.report
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -452,6 +453,9 @@ fun WithdrawalTab(
         TakeAmountDialog(
             partners = partners,
             currentPartnerName = settings.activePartnerName.split(" ").firstOrNull() ?: "",
+            availableAmount = availableAmount,
+            currency = settings.currency,
+            isTamil = settings.language.equals("TA", ignoreCase = true),
             onDismiss = { showTakeAmountDialog = false },
             onConfirm = { withdrawal ->
                 onAddWithdrawal(withdrawal)
@@ -616,6 +620,9 @@ fun WithdrawalItemCard(
 fun TakeAmountDialog(
     partners: List<PartnerEntity>,
     currentPartnerName: String,
+    availableAmount: Double = 0.0,
+    currency: String = "₹",
+    isTamil: Boolean = false,
     onDismiss: () -> Unit,
     onConfirm: (WithdrawalEntity) -> Unit
 ) {
@@ -629,37 +636,80 @@ fun TakeAmountDialog(
     var selectedCategory by remember { mutableStateOf("Personal Use") }
     var note by remember { mutableStateOf("") }
     var hasAttemptedSubmit by remember { mutableStateOf(false) }
+    var isSubmitting by remember { mutableStateOf(false) }
 
     var partnerDropdownExpanded by remember { mutableStateOf(false) }
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
 
-    val isAmountInvalid = (amountText.toDoubleOrNull() ?: 0.0) <= 0
+    val enteredAmount = amountText.toDoubleOrNull() ?: 0.0
+    val isAmountZeroOrNegative = enteredAmount <= 0
+    val isAmountExceedsBalance = enteredAmount > availableAmount
+    val isAmountInvalid = isAmountZeroOrNegative || isAmountExceedsBalance
     val isPartnerInvalid = selectedPartner.isBlank()
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            if (!isSubmitting) onDismiss()
+        },
         title = {
-            Text("Take Amount (Partner Withdrawal)", fontWeight = FontWeight.Bold, color = ForestGreenHeader)
+            Text(
+                text = if (isTamil) "பங்குதாரர் எடுப்பு பதிவு" else "Take Amount (Partner Withdrawal)",
+                fontWeight = FontWeight.Bold,
+                color = ForestGreenHeader
+            )
         },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // Available Balance Indicator Banner
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (availableAmount > 0) SoftSageGreen.copy(alpha = 0.5f) else Color(0xFFFFEBEE),
+                    border = BorderStroke(0.5.dp, if (availableAmount > 0) SageOutline else AlertDueRed.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isTamil) "கிடைக்கும் இருப்பு:" else "Available Balance:",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TextSecondaryDark
+                        )
+                        Text(
+                            text = formatInr(availableAmount),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (availableAmount > 0) DeepSageGreen else AlertDueRed
+                        )
+                    }
+                }
+
                 // Select Partner
                 ExposedDropdownMenuBox(
                     expanded = partnerDropdownExpanded,
-                    onExpandedChange = { partnerDropdownExpanded = !partnerDropdownExpanded }
+                    onExpandedChange = { if (!isSubmitting) partnerDropdownExpanded = !partnerDropdownExpanded }
                 ) {
                     OutlinedTextField(
                         value = selectedPartner,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Partner Name *") },
+                        label = { Text(if (isTamil) "பங்குதாரர் பெயர் *" else "Partner Name *") },
                         isError = hasAttemptedSubmit && isPartnerInvalid,
                         supportingText = {
                             if (hasAttemptedSubmit && isPartnerInvalid) {
-                                Text("Partner selection is required", color = AlertDueRed, fontSize = 11.sp)
+                                Text(
+                                    text = if (isTamil) "பங்குதாரரை தேர்ந்தெடுக்கவும்" else "Partner selection is required",
+                                    color = AlertDueRed,
+                                    fontSize = 11.sp
+                                )
                             }
                         },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = partnerDropdownExpanded) },
@@ -688,11 +738,21 @@ fun TakeAmountDialog(
                 OutlinedTextField(
                     value = amountText,
                     onValueChange = { amountText = it },
-                    label = { Text("Withdrawal Amount (₹) *") },
+                    label = { Text(if (isTamil) "எடுப்பு தொகை (₹) *" else "Withdrawal Amount (₹) *") },
                     isError = hasAttemptedSubmit && isAmountInvalid,
                     supportingText = {
-                        if (hasAttemptedSubmit && isAmountInvalid) {
-                            Text("Amount is required (greater than ₹0)", color = AlertDueRed, fontSize = 11.sp)
+                        if (hasAttemptedSubmit && isAmountZeroOrNegative) {
+                            Text(
+                                text = if (isTamil) "தொகை தேவை (₹0 ஐ விட அதிகமாக இருக்க வேண்டும்)" else "Amount is required (greater than ₹0)",
+                                color = AlertDueRed,
+                                fontSize = 11.sp
+                            )
+                        } else if (isAmountExceedsBalance && enteredAmount > 0) {
+                            Text(
+                                text = if (isTamil) "தொகை இருக்கும் இருப்பை விட (${formatInr(availableAmount)}) அதிகமாக உள்ளது" else "Amount exceeds available balance (${formatInr(availableAmount)})",
+                                color = AlertDueRed,
+                                fontSize = 11.sp
+                            )
                         }
                     },
                     singleLine = true,
@@ -706,13 +766,13 @@ fun TakeAmountDialog(
                 // Category
                 ExposedDropdownMenuBox(
                     expanded = categoryDropdownExpanded,
-                    onExpandedChange = { categoryDropdownExpanded = !categoryDropdownExpanded }
+                    onExpandedChange = { if (!isSubmitting) categoryDropdownExpanded = !categoryDropdownExpanded }
                 ) {
                     OutlinedTextField(
                         value = selectedCategory,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Category / Purpose") },
+                        label = { Text(if (isTamil) "காரணம் / வகை" else "Category / Purpose") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryDropdownExpanded) },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -739,7 +799,7 @@ fun TakeAmountDialog(
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
-                    label = { Text("Note (Optional)") },
+                    label = { Text(if (isTamil) "குறிப்பு (விருப்பத்தேர்வு)" else "Note (Optional)") },
                     maxLines = 2,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
@@ -751,7 +811,8 @@ fun TakeAmountDialog(
                 onClick = {
                     hasAttemptedSubmit = true
                     val amt = amountText.toDoubleOrNull() ?: 0.0
-                    if (amt > 0 && selectedPartner.isNotBlank()) {
+                    if (amt > 0 && amt <= availableAmount && selectedPartner.isNotBlank() && !isSubmitting) {
+                        isSubmitting = true
                         val matchedPartner = partners.find { it.name == selectedPartner }
                         val withdrawal = WithdrawalEntity(
                             partnerId = matchedPartner?.id ?: 0,
@@ -764,14 +825,18 @@ fun TakeAmountDialog(
                         onConfirm(withdrawal)
                     }
                 },
+                enabled = !isSubmitting && (!hasAttemptedSubmit || (!isAmountInvalid && !isPartnerInvalid)),
                 colors = ButtonDefaults.buttonColors(containerColor = DeepSageGreen)
             ) {
-                Text("Record Withdrawal")
+                Text(if (isTamil) "எடுப்பை சேமி" else "Record Withdrawal")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isSubmitting
+            ) {
+                Text(if (isTamil) "ரத்து" else "Cancel")
             }
         }
     )

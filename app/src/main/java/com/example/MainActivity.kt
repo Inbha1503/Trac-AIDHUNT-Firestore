@@ -86,6 +86,7 @@ fun MainAppContent(
     val availableWorkspaces by viewModel.availableWorkspaces.collectAsState()
     val activeWorkspaceId by viewModel.activeWorkspaceId.collectAsState()
     val workspaceMembers by viewModel.workspaceMembers.collectAsState()
+    val isCollaborationOwner by viewModel.isCollaborationOwner.collectAsState()
 
     // Handle Hardware Back Button
     BackHandler(enabled = currentTab == BottomTab.REPORT && currentReportSubPage != ReportSubPage.MENU) {
@@ -118,7 +119,7 @@ fun MainAppContent(
             onRightActionClick = null
         }
         BottomTab.NEW_ENTRY -> {
-            topBarTitle = if (isTamil) "புதிய வேலை" else "New Job"
+            topBarTitle = if (isTamil) "புதிய பதிவு" else "New Entry"
             showBackButton = false
             onBackAction = null
             rightActionIcon = null
@@ -399,7 +400,7 @@ fun MainAppContent(
 
                         BottomTab.NEW_ENTRY -> {
                             val draft = newEntryDraft ?: com.example.ui.viewmodel.NewEntryDraft.createDefault(
-                                defaultTractor = if (settings.lockedTractorLabel.isNotBlank()) settings.lockedTractorLabel else (tractors.firstOrNull()?.label ?: "Mahindra 575 DI"),
+                                defaultTractor = if (settings.lockedTractorLabel.isNotBlank()) settings.lockedTractorLabel else (tractors.firstOrNull()?.label ?: ""),
                                 lockedTractor = settings.lockedTractorLabel,
                                 defaultHourlyRate = settings.defaultHourlyRate
                             )
@@ -439,6 +440,7 @@ fun MainAppContent(
                                 pendingInvitations = pendingInvitations,
                                 availableWorkspaces = availableWorkspaces,
                                 workspaceMembers = workspaceMembers,
+                                isCollaborationOwner = isCollaborationOwner,
                                 activeWorkspaceId = activeWorkspaceId,
                                 onSwitchWorkspace = { wsId ->
                                     viewModel.switchWorkspace(wsId) {

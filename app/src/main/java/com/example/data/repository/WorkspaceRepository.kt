@@ -84,9 +84,13 @@ class WorkspaceRepository(
     private val _workspaceMembers = MutableStateFlow<List<WorkspaceMember>>(emptyList())
     val workspaceMembers: StateFlow<List<WorkspaceMember>> = _workspaceMembers.asStateFlow()
 
+    private val _isCollaborationOwner = MutableStateFlow(true)
+    val isCollaborationOwner: StateFlow<Boolean> = _isCollaborationOwner.asStateFlow()
+
     private var activeUid: String? = null
     private var collaborationIndexListener: com.google.firebase.firestore.ListenerRegistration? = null
     private val groupMembersListeners = mutableMapOf<String, com.google.firebase.firestore.ListenerRegistration>()
+    private val groupWorkspacesMap = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
 
     fun isCloudReady(): Boolean = _workspaceInitState.value is WorkspaceInitState.Ready
 
@@ -115,8 +119,31 @@ class WorkspaceRepository(
             val personalWsId = workspace.workspaceId
             _personalWorkspaceId.value = personalWsId
 
+            // Auto-connect if this verified phone number was previously added by an owner while unregistered
+            val rawPhone = userProfile.phoneNumber ?: com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.phoneNumber ?: ""
+            val verifiedPhone = normalizePhoneNumber(rawPhone)
+            if (verifiedPhone.isNotBlank()) {
+                try {
+                    val connected = firestoreRepository.findAndConnectPendingPartnerLinks(
+                        userUid = uid,
+                        verifiedPhone = verifiedPhone,
+                        userWorkspaceId = personalWsId,
+                        userDisplayName = userProfile.displayName
+                    )
+                    if (connected.isNotEmpty()) {
+                        Log.d("TRAC_PARTNER", "Auto-connected to groups on login: $connected")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "findAndConnectPendingPartnerLinks error: ${e.message}")
+                }
+            }
+
             // Discover all visible workspace IDs from collaboration groups
             val userGroups = firestoreRepository.getUserCollaborationGroupIds(uid)
+            val userGroupIndices = firestoreRepository.getUserCollaborationGroups(uid)
+            val isPartnerInOtherGroup = userGroupIndices.any { it.ownerUid.isNotBlank() && it.ownerUid != uid && it.role == "partner" }
+            _isCollaborationOwner.value = !isPartnerInOtherGroup
+
             val allGroupIds = (userGroups + personalWsId).distinct()
             val discoveredWorkspaces = mutableSetOf<String>()
             discoveredWorkspaces.add(personalWsId)
@@ -192,19 +219,32 @@ class WorkspaceRepository(
             val groupsToRemove = currentListeningGroups - allGroups.toSet()
             for (gId in groupsToRemove) {
                 groupMembersListeners.remove(gId)?.remove()
+                groupWorkspacesMap.remove(gId)
+            }
+
+            if (groupsToRemove.isNotEmpty()) {
+                scope.launch {
+                    val newVisible = (groupWorkspacesMap.values.flatten() + personalWsId).toSet()
+                    if (newVisible != _visibleWorkspaceIds.value) {
+                        Log.d("TRAC_WORKSPACE", "Visible workspaces after group removal: $newVisible")
+                        _visibleWorkspaceIds.value = newVisible
+                        attachRealtimeListenersForVisibleWorkspaces()
+                        refreshWorkspaceMembers()
+                    }
+                }
             }
 
             for (groupId in allGroups) {
                 if (!groupMembersListeners.containsKey(groupId)) {
                     val listener = firestoreRepository.listenToCollaborationGroupMembers(groupId) { memberWorkspaces ->
                         scope.launch {
-                            val currentVisible = _visibleWorkspaceIds.value.toMutableSet()
-                            currentVisible.add(personalWsId)
-                            currentVisible.addAll(memberWorkspaces)
-                            if (currentVisible != _visibleWorkspaceIds.value) {
-                                Log.d("TRAC_WORKSPACE", "Visible workspaces updated: $currentVisible")
-                                _visibleWorkspaceIds.value = currentVisible
+                            groupWorkspacesMap[groupId] = memberWorkspaces
+                            val newVisible = (groupWorkspacesMap.values.flatten() + personalWsId).toSet()
+                            if (newVisible != _visibleWorkspaceIds.value) {
+                                Log.d("TRAC_WORKSPACE", "Visible workspaces updated: $newVisible")
+                                _visibleWorkspaceIds.value = newVisible
                                 attachRealtimeListenersForVisibleWorkspaces()
+                                refreshWorkspaceMembers()
                             }
                         }
                     }
@@ -274,6 +314,7 @@ class WorkspaceRepository(
         collaborationIndexListener = null
         groupMembersListeners.values.forEach { it.remove() }
         groupMembersListeners.clear()
+        groupWorkspacesMap.clear()
         _workspaceMembers.value = emptyList()
         _isInitialized.value = false
         _workspaceInitState.value = WorkspaceInitState.Uninitialized
@@ -552,7 +593,23 @@ class WorkspaceRepository(
         }
     }
 
+    suspend fun getAvailableBalance(): Double {
+        val visible = _visibleWorkspaceIds.value.toList()
+        if (visible.isEmpty()) return 0.0
+        val totalRec = jobEntryDao.getTotalReceivedForWorkspaces(visible).firstOrNull() ?: 0.0
+        val totalExp = expenseDao.getTotalExpensesForWorkspaces(visible).firstOrNull() ?: 0.0
+        val totalWth = withdrawalDao.getTotalWithdrawnForWorkspaces(visible).firstOrNull() ?: 0.0
+        return totalRec - totalExp - totalWth
+    }
+
     suspend fun addWithdrawal(withdrawal: WithdrawalEntity): Long {
+        if (withdrawal.amount <= 0) {
+            throw IllegalArgumentException("Withdrawal amount must be greater than ₹0")
+        }
+        val currentAvailable = getAvailableBalance()
+        if (withdrawal.amount > currentAvailable) {
+            throw IllegalStateException("Insufficient available balance. Available: ₹$currentAvailable")
+        }
         val isReady = isCloudReady()
         val wsId = getOrResolveWorkspaceId() ?: ""
         val safeWithId = if (withdrawal.id > 0) withdrawal.id else IdGenerator.generateId()
@@ -867,6 +924,8 @@ class WorkspaceRepository(
         for (wsId in visible) {
             val members = firestoreRepository.getWorkspaceMembers(wsId)
             allMembers.addAll(members)
+            val collabMembers = firestoreRepository.getCollaborationGroupMembersList(wsId)
+            allMembers.addAll(collabMembers)
         }
         _workspaceMembers.value = allMembers.distinctBy { it.uid.ifBlank { it.phoneNumber ?: "" } }
     }
@@ -913,18 +972,29 @@ class WorkspaceRepository(
         if (partnerUid.isNullOrBlank()) {
             try {
                 firestoreRepository.savePartner(wsId, partnerEntity, activeUid)
+                firestoreRepository.savePendingPartnerPhone(
+                    groupId = wsId,
+                    normalizedPhone = normalizedPhone,
+                    displayName = name.trim(),
+                    role = role.trim().ifBlank { "partner" },
+                    ownerUid = activeUid ?: ""
+                )
             } catch (e: Exception) {
                 Log.w(TAG, "Local partner save deferred: ${e.message}")
             }
             return DirectAddPartnerResult.AccountNotRegistered(
                 partnerEntity,
-                "Partner account not found. Ask this partner to create/login to their Phone account first."
+                "Partner account not found. It will automatically connect when the partner registers their phone number."
             )
         }
 
         if (partnerUid == activeUid) {
             return DirectAddPartnerResult.Error("Owner cannot add themselves as Partner.")
         }
+
+        try {
+            firestoreRepository.deletePendingPartnerPhone(wsId, normalizedPhone)
+        } catch (_: Exception) {}
 
         // 3. Directly create workspace membership and user discovery index
         val currentSettings = appSettingsDao.getSettingsForWorkspaceOnce(wsId)
@@ -948,7 +1018,9 @@ class WorkspaceRepository(
             ownerWorkspaceId = wsId,
             ownerUid = activeUid ?: "",
             partnerUid = partnerUid,
-            partnerWorkspaceId = partnerPersonalWsId
+            partnerWorkspaceId = partnerPersonalWsId,
+            partnerPhone = normalizedPhone,
+            partnerDisplayName = name.trim()
         )
 
         // Update local visible workspaces
@@ -967,23 +1039,8 @@ class WorkspaceRepository(
         }
     }
 
-    suspend fun removePartner(partner: PartnerEntity) {
-        val wsId = getOrResolveWorkspaceId() ?: ""
-        partnerDao.deletePartner(partner)
-
-        if (isCloudReady() && wsId.isNotBlank()) {
-            val partnerUid = firestoreRepository.lookupPhoneInDirectory(partner.phone)
-            firestoreRepository.removePartnerFromWorkspace(wsId, partnerUid, partner.phone)
-            if (!partnerUid.isNullOrBlank()) {
-                firestoreRepository.removePartnerFromCollaborationGroup(wsId, partnerUid)
-                val partnerPersonalWsId = "ws_${partnerUid.replace(Regex("[^a-zA-Z0-9]"), "").take(16).ifBlank { "main" }}"
-                val currentVisible = _visibleWorkspaceIds.value.toMutableSet()
-                currentVisible.remove(partnerPersonalWsId)
-                _visibleWorkspaceIds.value = currentVisible
-                attachRealtimeListenersForVisibleWorkspaces()
-            }
-            refreshWorkspaceMembers(wsId)
-        }
+    suspend fun removePartner(partner: PartnerEntity, partnerUid: String? = null) {
+        removePartnerFromWorkspace(partner, partnerUid)
     }
 
     suspend fun checkForInvitations(phoneNumber: String): List<WorkspaceInvitation> {
@@ -1050,18 +1107,28 @@ class WorkspaceRepository(
         }
     }
 
-    suspend fun removePartnerFromWorkspace(partner: PartnerEntity) {
+    suspend fun removePartnerFromWorkspace(partner: PartnerEntity, targetPartnerUid: String? = null) {
         val currentWsId = _personalWorkspaceId.value ?: _activeWorkspaceId.value ?: partner.workspaceId
+        val isOwner = _isCollaborationOwner.value
+        if (!isOwner) {
+            Log.w(TAG, "Unauthorized: Non-owner cannot remove partner")
+            return
+        }
         try {
             partnerDao.deletePartner(partner)
             if (isCloudReady() && currentWsId.isNotBlank()) {
-                val partnerUid = firestoreRepository.lookupPhoneInDirectory(partner.phone)
+                val partnerUid = targetPartnerUid?.ifBlank { null }
+                    ?: firestoreRepository.lookupPhoneInDirectory(partner.phone)
                 firestoreRepository.deletePartner(currentWsId, partner.id)
                 firestoreRepository.removePartnerFromWorkspace(
                     workspaceId = currentWsId,
                     partnerUid = partnerUid,
                     partnerPhone = partner.phone
                 )
+                val normPhone = normalizePhoneNumber(partner.phone)
+                if (normPhone.isNotBlank()) {
+                    firestoreRepository.deletePendingPartnerPhone(currentWsId, normPhone)
+                }
                 if (!partnerUid.isNullOrBlank()) {
                     firestoreRepository.removePartnerFromCollaborationGroup(currentWsId, partnerUid)
                     val partnerPersonalWsId = "ws_${partnerUid.replace(Regex("[^a-zA-Z0-9]"), "").take(16).ifBlank { "main" }}"
@@ -1070,10 +1137,36 @@ class WorkspaceRepository(
                     _visibleWorkspaceIds.value = currentVisible
                     attachRealtimeListenersForVisibleWorkspaces()
                 }
+                refreshWorkspaceMembers(currentWsId)
             }
             Log.d("TRAC_PARTNER", "Removed partner ${partner.name} from workspace $currentWsId")
         } catch (e: Exception) {
             Log.e(TAG, "Error removing partner: ${e.message}", e)
+        }
+    }
+
+    suspend fun leaveCollaborationGroup(ownerWorkspaceId: String) {
+        val uid = activeUid ?: ""
+        val currentSettings = appSettingsDao.getSettingsForWorkspaceOnce(getOrResolveWorkspaceId() ?: "")
+        val currentPhone = currentSettings?.activePartnerPhone ?: ""
+
+        if (isCloudReady() && ownerWorkspaceId.isNotBlank() && uid.isNotBlank()) {
+            try {
+                firestoreRepository.removePartnerFromWorkspace(
+                    workspaceId = ownerWorkspaceId,
+                    partnerUid = uid,
+                    partnerPhone = currentPhone
+                )
+                firestoreRepository.removePartnerFromCollaborationGroup(ownerWorkspaceId, uid)
+                val currentVisible = _visibleWorkspaceIds.value.toMutableSet()
+                currentVisible.remove(ownerWorkspaceId)
+                _visibleWorkspaceIds.value = currentVisible
+                attachRealtimeListenersForVisibleWorkspaces()
+                refreshWorkspaceMembers()
+                Log.d("TRAC_PARTNER", "User $uid left collaboration group $ownerWorkspaceId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error leaving collaboration group: ${e.message}", e)
+            }
         }
     }
 

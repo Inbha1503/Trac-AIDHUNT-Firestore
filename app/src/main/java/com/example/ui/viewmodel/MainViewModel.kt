@@ -119,6 +119,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val visibleWorkspaceIds: StateFlow<Set<String>> = workspaceRepository.visibleWorkspaceIds
     val pendingInvitations: StateFlow<List<WorkspaceInvitation>> = workspaceRepository.pendingInvitations
     val workspaceMembers: StateFlow<List<WorkspaceMember>> = workspaceRepository.workspaceMembers
+    val isCollaborationOwner: StateFlow<Boolean> = workspaceRepository.isCollaborationOwner
 
     private val _availableWorkspaces = MutableStateFlow<List<Workspace>>(emptyList())
     val availableWorkspaces: StateFlow<List<Workspace>> = _availableWorkspaces.asStateFlow()
@@ -435,12 +436,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun addWithdrawal(withdrawal: WithdrawalEntity, onSuccess: () -> Unit = {}) {
+    fun addWithdrawal(
+        withdrawal: WithdrawalEntity,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        val currentAvailable = availableAmount.value
+        if (withdrawal.amount <= 0) {
+            onError("Withdrawal amount must be greater than ₹0")
+            return
+        }
+        if (withdrawal.amount > currentAvailable) {
+            val formatted = java.text.NumberFormat.getCurrencyInstance(java.util.Locale("en", "IN")).format(currentAvailable)
+            onError("Insufficient available balance. Available: $formatted")
+            return
+        }
         viewModelScope.launch {
             try {
                 workspaceRepository.addWithdrawal(withdrawal)
                 _syncMessage.value = "Withdrawal saved and synced with Cloud"
                 onSuccess()
+            } catch (e: IllegalStateException) {
+                onError(e.message ?: "Insufficient available balance")
+            } catch (e: IllegalArgumentException) {
+                onError(e.message ?: "Invalid withdrawal amount")
             } catch (e: Exception) {
                 val code = (e as? com.google.firebase.firestore.FirebaseFirestoreException)?.code?.name ?: "SYNC_FAILED"
                 _syncMessage.value = "Withdrawal saved locally. Cloud sync pending ($code)"
@@ -608,12 +627,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun deletePartner(partner: PartnerEntity) {
+    fun deletePartner(partner: PartnerEntity, partnerUid: String? = null, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             try {
-                workspaceRepository.removePartnerFromWorkspace(partner)
+                workspaceRepository.removePartner(partner, partnerUid)
+                onComplete()
             } catch (e: Exception) {
                 android.util.Log.w("TRAC_FIRESTORE", "Delete partner failed: ${e.message}")
+                onComplete()
+            }
+        }
+    }
+
+    fun leavePartnership(ownerWorkspaceId: String, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                workspaceRepository.leaveCollaborationGroup(ownerWorkspaceId)
+                onComplete()
+            } catch (e: Exception) {
+                android.util.Log.w("TRAC_FIRESTORE", "Leave partnership failed: ${e.message}")
+                onComplete()
             }
         }
     }

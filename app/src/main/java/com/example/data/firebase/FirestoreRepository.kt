@@ -1067,9 +1067,22 @@ class FirestoreRepository(
                 .collection("members")
                 .get()
                 .await()
-            snapshot.documents.mapNotNull { doc ->
-                doc.data?.let { WorkspaceMember.fromMap(it) }
+            val list = mutableListOf<WorkspaceMember>()
+            for (doc in snapshot.documents) {
+                val data = doc.data ?: continue
+                var member = WorkspaceMember.fromMap(data)
+                if (member.displayName.isNullOrBlank() && member.uid.isNotBlank()) {
+                    try {
+                        val userDoc = firestore.collection("users").document(member.uid).get().await()
+                        val uName = userDoc.getString("displayName")
+                        if (!uName.isNullOrBlank()) {
+                            member = member.copy(displayName = uName)
+                        }
+                    } catch (_: Exception) {}
+                }
+                list.add(member)
             }
+            list
         } catch (e: Exception) {
             Log.w("TRAC_PARTNER", "Error getting members for $workspaceId: ${e.message}")
             emptyList()
@@ -1161,7 +1174,9 @@ class FirestoreRepository(
         ownerWorkspaceId: String,
         ownerUid: String,
         partnerUid: String,
-        partnerWorkspaceId: String
+        partnerWorkspaceId: String,
+        partnerPhone: String? = null,
+        partnerDisplayName: String? = null
     ): Result<Unit> {
         val firestore = db ?: return Result.failure(IllegalStateException("Firestore is not initialized"))
         val now = System.currentTimeMillis()
@@ -1177,7 +1192,9 @@ class FirestoreRepository(
                 workspaceId = partnerWorkspaceId,
                 role = "partner",
                 status = "active",
-                joinedAt = now
+                joinedAt = now,
+                phoneNumber = partnerPhone,
+                displayName = partnerDisplayName
             )
             batch.set(memberRef, groupMember.toMap(), SetOptions.merge())
 
@@ -1222,6 +1239,239 @@ class FirestoreRepository(
             Log.d("TRAC_PARTNER", "COLLABORATION_GROUP_UNLINK ownerWs=$ownerWorkspaceId partnerUid=$partnerUid SUCCESS")
         } catch (e: Exception) {
             Log.w("TRAC_PARTNER", "Error unlinking from collaboration group: ${e.message}")
+        }
+    }
+
+    suspend fun savePendingPartnerPhone(
+        groupId: String,
+        normalizedPhone: String,
+        displayName: String,
+        role: String,
+        ownerUid: String
+    ): Result<Unit> {
+        val firestore = db ?: return Result.failure(IllegalStateException("Firestore is not initialized"))
+        val formattedPhone = normalizePhoneNumber(normalizedPhone)
+        if (formattedPhone.isBlank() || groupId.isBlank()) {
+            return Result.failure(IllegalArgumentException("Invalid phone or groupId"))
+        }
+
+        return try {
+            val pendingRef = firestore.collection("collaborationGroups").document(groupId)
+                .collection("pendingPhones").document(formattedPhone)
+            val pendingData = PendingPartnerPhone(
+                normalizedPhone = formattedPhone,
+                displayName = displayName.trim(),
+                role = role.trim().ifBlank { "partner" },
+                addedByUid = ownerUid,
+                groupId = groupId,
+                createdAt = System.currentTimeMillis(),
+                status = "waiting_for_registration"
+            )
+            pendingRef.set(pendingData.toMap(), SetOptions.merge()).await()
+            Log.d("TRAC_PARTNER", "PENDING_PHONE_SAVED group=$groupId phone=$formattedPhone SUCCESS")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("TRAC_PARTNER", "PENDING_PHONE_SAVED failed: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deletePendingPartnerPhone(
+        groupId: String,
+        normalizedPhone: String
+    ) {
+        val firestore = db ?: return
+        val formattedPhone = normalizePhoneNumber(normalizedPhone)
+        if (formattedPhone.isBlank() || groupId.isBlank()) return
+        try {
+            firestore.collection("collaborationGroups").document(groupId)
+                .collection("pendingPhones").document(formattedPhone)
+                .delete().await()
+            Log.d("TRAC_PARTNER", "PENDING_PHONE_DELETED group=$groupId phone=$formattedPhone")
+        } catch (e: Exception) {
+            Log.w("TRAC_PARTNER", "Failed to delete pending phone: ${e.message}")
+        }
+    }
+
+    suspend fun getPendingPartnerPhones(groupId: String): List<PendingPartnerPhone> {
+        val firestore = db ?: return emptyList()
+        if (groupId.isBlank()) return emptyList()
+        return try {
+            val snap = firestore.collection("collaborationGroups").document(groupId)
+                .collection("pendingPhones")
+                .whereEqualTo("status", "waiting_for_registration")
+                .get().await()
+            snap.documents.mapNotNull { doc ->
+                doc.data?.let { PendingPartnerPhone.fromMap(it) }
+            }
+        } catch (e: Exception) {
+            Log.w("TRAC_PARTNER", "Failed to get pending phones for $groupId: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun findAndConnectPendingPartnerLinks(
+        userUid: String,
+        verifiedPhone: String,
+        userWorkspaceId: String,
+        userDisplayName: String?
+    ): List<String> {
+        val firestore = db ?: return emptyList()
+        val formattedPhone = normalizePhoneNumber(verifiedPhone)
+        if (formattedPhone.isBlank() || userUid.isBlank()) return emptyList()
+
+        val connectedGroupIds = mutableListOf<String>()
+
+        try {
+            val pendingQuery = firestore.collectionGroup("pendingPhones")
+                .whereEqualTo("normalizedPhone", formattedPhone)
+                .whereEqualTo("status", "waiting_for_registration")
+                .get().await()
+
+            Log.d("TRAC_PARTNER", "AUTO_CONNECT query phone=$formattedPhone matches=${pendingQuery.documents.size}")
+
+            for (doc in pendingQuery.documents) {
+                val data = doc.data ?: continue
+                val pending = PendingPartnerPhone.fromMap(data)
+                val groupId = pending.groupId.ifBlank { doc.reference.parent.parent?.id ?: "" }
+                val addedByUid = pending.addedByUid
+
+                if (groupId.isBlank() || addedByUid.isBlank()) continue
+
+                // Check that collaboration group exists and addedByUid is the owner
+                val groupSnap = firestore.collection("collaborationGroups").document(groupId).get().await()
+                if (!groupSnap.exists()) continue
+                val groupOwnerUid = groupSnap.getString("ownerUid")
+                if (groupOwnerUid != null && groupOwnerUid != addedByUid) {
+                    Log.w("TRAC_PARTNER", "Security mismatch for pending phone: ownerUid=$groupOwnerUid addedBy=$addedByUid")
+                    continue
+                }
+
+                val now = System.currentTimeMillis()
+                val partnerName = userDisplayName?.ifBlank { null }
+                    ?: pending.displayName.ifBlank { "Partner" }
+
+                val batch = firestore.batch()
+
+                // 1. Add active member in collaboration group
+                val memberRef = firestore.collection("collaborationGroups").document(groupId)
+                    .collection("members").document(userUid)
+                val groupMember = CollaborationGroupMember(
+                    uid = userUid,
+                    workspaceId = userWorkspaceId,
+                    role = "partner",
+                    status = "active",
+                    joinedAt = now,
+                    phoneNumber = formattedPhone,
+                    displayName = partnerName
+                )
+                batch.set(memberRef, groupMember.toMap(), SetOptions.merge())
+
+                // 2. Add user discovery index
+                val partnerIndexRef = firestore.collection("userCollaborationGroups").document(userUid)
+                    .collection("groups").document(groupId)
+                val partnerIndex = UserCollaborationGroupIndex(
+                    groupId = groupId,
+                    ownerUid = addedByUid,
+                    ownerWorkspaceId = groupId,
+                    role = "partner",
+                    status = "active",
+                    joinedAt = now
+                )
+                batch.set(partnerIndexRef, partnerIndex.toMap(), SetOptions.merge())
+
+                // 3. Workspace member doc for backward compatibility
+                val wsMemberRef = firestore.collection("workspaces").document(groupId)
+                    .collection("members").document(userUid)
+                val wsMember = WorkspaceMember(
+                    uid = userUid,
+                    role = "partner",
+                    status = "active",
+                    phoneNumber = formattedPhone,
+                    joinedAt = now,
+                    addedByUid = addedByUid,
+                    invitedByUid = addedByUid,
+                    displayName = partnerName
+                )
+                batch.set(wsMemberRef, wsMember.toMap(), SetOptions.merge())
+
+                // 4. User Workspace Membership discovery doc
+                val wsIndexRef = firestore.collection("userWorkspaceMemberships").document(userUid)
+                    .collection("workspaces").document(groupId)
+                batch.set(wsIndexRef, mapOf(
+                    "workspaceId" to groupId,
+                    "ownerUid" to addedByUid,
+                    "role" to "partner",
+                    "status" to "active",
+                    "joinedAt" to now,
+                    "workspaceName" to "Shared Business"
+                ), SetOptions.merge())
+
+                // 5. Delete pending record
+                batch.delete(doc.reference)
+
+                batch.commit().await()
+                connectedGroupIds.add(groupId)
+                Log.d("TRAC_PARTNER", "AUTO_CONNECT SUCCESS group=$groupId phone=$formattedPhone uid=$userUid")
+            }
+        } catch (e: Exception) {
+            Log.e("TRAC_PARTNER", "AUTO_CONNECT failed for phone=$formattedPhone: ${e.message}", e)
+        }
+
+        return connectedGroupIds
+    }
+
+    suspend fun getCollaborationGroupMembersList(groupId: String): List<WorkspaceMember> {
+        val firestore = db ?: return emptyList()
+        if (groupId.isBlank()) return emptyList()
+        return try {
+            val snapshot = firestore.collection("collaborationGroups").document(groupId)
+                .collection("members").get().await()
+            val list = mutableListOf<WorkspaceMember>()
+            for (doc in snapshot.documents) {
+                val data = doc.data ?: continue
+                var member = WorkspaceMember(
+                    uid = doc.getString("uid") ?: doc.id,
+                    role = doc.getString("role") ?: "partner",
+                    status = doc.getString("status") ?: "active",
+                    phoneNumber = doc.getString("phoneNumber"),
+                    displayName = doc.getString("displayName"),
+                    joinedAt = doc.getLong("joinedAt") ?: System.currentTimeMillis()
+                )
+                if (member.displayName.isNullOrBlank() && member.uid.isNotBlank()) {
+                    try {
+                        val userDoc = firestore.collection("users").document(member.uid).get().await()
+                        val uName = userDoc.getString("displayName")
+                        val uPhone = userDoc.getString("phoneNumber")
+                        if (!uName.isNullOrBlank()) {
+                            member = member.copy(displayName = uName)
+                        }
+                        if (member.phoneNumber.isNullOrBlank() && !uPhone.isNullOrBlank()) {
+                            member = member.copy(phoneNumber = uPhone)
+                        }
+                    } catch (_: Exception) {}
+                }
+                list.add(member)
+            }
+            list
+        } catch (e: Exception) {
+            Log.w("TRAC_PARTNER", "Error getting collaboration members for $groupId: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun getUserCollaborationGroups(uid: String): List<UserCollaborationGroupIndex> {
+        val firestore = db ?: return emptyList()
+        if (uid.isBlank()) return emptyList()
+        return try {
+            val snap = firestore.collection("userCollaborationGroups").document(uid)
+                .collection("groups").get().await()
+            snap.documents.mapNotNull { doc ->
+                doc.data?.let { UserCollaborationGroupIndex.fromMap(it) }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error getting userCollaborationGroups: ${e.message}")
+            emptyList()
         }
     }
 

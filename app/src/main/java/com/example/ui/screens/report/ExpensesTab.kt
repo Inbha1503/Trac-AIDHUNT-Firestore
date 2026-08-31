@@ -1027,7 +1027,7 @@ fun ExpenseListItemRow(
                 )
             }
 
-            // Middle Info Column (Expense Type, Tractor, Operator)
+            // Middle Info Column (Expense Type, Tractor, Operator, Description)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = expense.expenseType,
@@ -1036,20 +1036,34 @@ fun ExpenseListItemRow(
                     color = Color(0xFF111827)
                 )
                 Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Tractor ${expense.tractorLabel}",
-                    fontSize = 11.5.sp,
-                    color = Color(0xFF4B5563),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = expense.operatorName.ifBlank { expense.addedByPartner },
-                    fontSize = 11.sp,
-                    color = Color(0xFF6B7280),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                if (expense.tractorLabel.isNotBlank()) {
+                    Text(
+                        text = expense.tractorLabel,
+                        fontSize = 11.5.sp,
+                        color = Color(0xFF4B5563),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                val opName = expense.operatorName.ifBlank { expense.addedByPartner }
+                if (opName.isNotBlank()) {
+                    Text(
+                        text = opName,
+                        fontSize = 11.sp,
+                        color = Color(0xFF6B7280),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (expense.description.isNotBlank()) {
+                    Text(
+                        text = expense.description,
+                        fontSize = 10.5.sp,
+                        color = Color(0xFF9CA3AF),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
 
             // Right Column: Amount + 3-dots Menu + Date

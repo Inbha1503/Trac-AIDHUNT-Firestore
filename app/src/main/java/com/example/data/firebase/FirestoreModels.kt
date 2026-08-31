@@ -125,6 +125,41 @@ data class UserCollaborationGroupIndex(
 }
 
 @Keep
+data class PendingPartnerPhone(
+    val normalizedPhone: String = "",
+    val displayName: String = "",
+    val role: String = "partner",
+    val addedByUid: String = "",
+    val groupId: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+    val status: String = "waiting_for_registration"
+) {
+    fun toMap(): Map<String, Any?> = mapOf(
+        "normalizedPhone" to normalizedPhone,
+        "displayName" to displayName,
+        "role" to role,
+        "addedByUid" to addedByUid,
+        "groupId" to groupId,
+        "createdAt" to createdAt,
+        "status" to status
+    )
+
+    companion object {
+        fun fromMap(map: Map<String, Any?>): PendingPartnerPhone {
+            return PendingPartnerPhone(
+                normalizedPhone = map["normalizedPhone"] as? String ?: "",
+                displayName = map["displayName"] as? String ?: "",
+                role = map["role"] as? String ?: "partner",
+                addedByUid = map["addedByUid"] as? String ?: "",
+                groupId = map["groupId"] as? String ?: "",
+                createdAt = (map["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                status = map["status"] as? String ?: "waiting_for_registration"
+            )
+        }
+    }
+}
+
+@Keep
 data class Workspace(
     val workspaceId: String = "",
     val name: String = "",

@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
@@ -958,9 +959,13 @@ fun CustomerCreditDueCard(
     val isPaid = customer.balanceDue <= 0.0
 
     Card(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(if (isPaid) SuccessPaidGreen.copy(alpha = 0.3f) else SageOutline.copy(alpha = 0.5f))),
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = androidx.compose.ui.graphics.SolidColor(
+                if (isPaid) SuccessPaidGreen.copy(alpha = 0.3f) else SageOutline.copy(alpha = 0.5f)
+            )
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -1000,11 +1005,15 @@ fun CustomerCreditDueCard(
                     ) {
                         Text(
                             text = customer.name,
-                            fontSize = 15.sp,
+                            fontSize = 15.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = ForestGreenHeader,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
                         )
+
+                        Spacer(modifier = Modifier.width(6.dp))
 
                         if (isPaid) {
                             Surface(
@@ -1034,7 +1043,7 @@ fun CustomerCreditDueCard(
                         } else {
                             Text(
                                 text = formatInr(customer.balanceDue),
-                                fontSize = 15.sp,
+                                fontSize = 15.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = AlertDueRed
                             )
@@ -1047,15 +1056,28 @@ fun CustomerCreditDueCard(
                         Text(
                             text = customer.location,
                             fontSize = 12.sp,
-                            color = TextSecondaryDark
+                            color = TextSecondaryDark,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
-                    Text(
-                        text = "Billed: ${formatInr(customer.totalBilled)} • Paid: ${formatInr(customer.totalPaid)}",
-                        fontSize = 11.sp,
-                        color = TextMutedDark
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Billed: ${formatInr(customer.totalBilled)}",
+                            fontSize = 11.5.sp,
+                            color = TextMutedDark
+                        )
+                        Text(text = "•", fontSize = 10.sp, color = TextMutedDark)
+                        Text(
+                            text = "Paid: ${formatInr(customer.totalPaid)}",
+                            fontSize = 11.5.sp,
+                            color = TextMutedDark
+                        )
+                    }
                 }
 
                 Icon(
@@ -1095,31 +1117,27 @@ fun CustomerCreditDueCard(
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(18.dp)
-                        ) {
-                            FlatShareIconButton(
-                                onClick = onShareWhatsApp,
-                                modifier = Modifier.testTag("btn_share_customer_card_${customer.id}"),
-                                contentDescription = "Share via WhatsApp",
-                                tint = SuccessPaidGreen,
-                                iconSize = 20.dp
-                            )
+                        FlatShareIconButton(
+                            onClick = onShareWhatsApp,
+                            modifier = Modifier.testTag("btn_share_customer_card_${customer.id}"),
+                            contentDescription = "Share via WhatsApp",
+                            tint = SuccessPaidGreen,
+                            iconSize = 20.dp
+                        )
 
-                            FlatPdfIconButton(
-                                onClick = onSharePdf,
-                                modifier = Modifier.testTag("btn_pdf_customer_card_${customer.id}"),
-                                contentDescription = "Share Statement PDF",
-                                tint = DeepSageGreen,
-                                iconSize = 20.dp
-                            )
-                        }
+                        FlatPdfIconButton(
+                            onClick = onSharePdf,
+                            modifier = Modifier.testTag("btn_pdf_customer_card_${customer.id}"),
+                            contentDescription = "Share Statement PDF",
+                            tint = DeepSageGreen,
+                            iconSize = 20.dp
+                        )
 
                         TextButton(
                             onClick = onClick,
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                             modifier = Modifier.testTag("btn_view_statement_card_${customer.id}")
                         ) {
                             Text("Statement", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DeepSageGreen)
@@ -1130,47 +1148,43 @@ fun CustomerCreditDueCard(
                 } else {
                     Text(
                         text = "Due: ${formatInr(customer.balanceDue)}",
-                        fontSize = 12.sp,
+                        fontSize = 12.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = AlertDueRed
                     )
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(18.dp)
-                        ) {
-                            FlatShareIconButton(
-                                onClick = onShareWhatsApp,
-                                modifier = Modifier.testTag("btn_share_customer_card_${customer.id}"),
-                                contentDescription = "Share via WhatsApp",
-                                tint = SuccessPaidGreen,
-                                iconSize = 20.dp
-                            )
+                        FlatShareIconButton(
+                            onClick = onShareWhatsApp,
+                            modifier = Modifier.testTag("btn_share_customer_card_${customer.id}"),
+                            contentDescription = "Share via WhatsApp",
+                            tint = SuccessPaidGreen,
+                            iconSize = 20.dp
+                        )
 
-                            FlatPdfIconButton(
-                                onClick = onSharePdf,
-                                modifier = Modifier.testTag("btn_pdf_customer_card_${customer.id}"),
-                                contentDescription = "Share Statement PDF",
-                                tint = DeepSageGreen,
-                                iconSize = 20.dp
-                            )
-                        }
+                        FlatPdfIconButton(
+                            onClick = onSharePdf,
+                            modifier = Modifier.testTag("btn_pdf_customer_card_${customer.id}"),
+                            contentDescription = "Share Statement PDF",
+                            tint = DeepSageGreen,
+                            iconSize = 20.dp
+                        )
 
                         Button(
                             onClick = onAddPayment,
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = SuccessPaidGreen),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                             modifier = Modifier
-                                .height(36.dp)
+                                .height(34.dp)
                                 .testTag("btn_add_payment_card_${customer.id}")
                         ) {
-                            Icon(Icons.Default.Paid, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Add Payment", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.Paid, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Add Payment", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

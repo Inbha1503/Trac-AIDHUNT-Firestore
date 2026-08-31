@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "898996717587",
+    "project_id": "trac-aidhunt",
+    "storage_bucket": "trac-aidhunt.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:898996717587:android:0cc18a4e8f628194be57e6",
+        "android_client_info": {
+          "package_name": "com.aistudio.aidhunttrac.cedlir"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "898996717587-m8kpbkqb5k5j5upec0bbhbjgnb6lajis.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aistudio.aidhunttrac.cedlir",
+            "certificate_hash": "fd148de2ea729d7b0c9f305c7e719059626a94b4"
+          }
+        },
+        {
+          "client_id": "898996717587-udfsfb6gtt14v5n6phjoima6kt1rjj9r.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDOB3cU3P-J8AeB-I5UxDwZfWe8VbK74s8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "898996717587-udfsfb6gtt14v5n6phjoima6kt1rjj9r.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -38,7 +38,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
         setContent {
             MyApplicationTheme {
                 MainAppContent(viewModel = viewModel, onShowToast = { msg ->
@@ -204,7 +206,21 @@ fun MainAppContent(
         }
     }
 
-    if (!settings.isLoggedIn) {
+    val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+    val isAuthInitializing = authState is com.example.data.firebase.AuthState.Idle || authState is com.example.data.firebase.AuthState.Loading
+
+    if (isAuthInitializing && currentUser != null) {
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .androidx.compose.foundation.background(AppTheme.colors.background),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            androidx.compose.material3.CircularProgressIndicator(
+                color = com.example.ui.theme.DeepSageGreen
+            )
+        }
+    } else if (currentUser == null && !settings.isLoggedIn) {
         val authError = (authState as? com.example.data.firebase.AuthState.Error)?.message
         LoginScreen(
             partners = partners,
@@ -306,7 +322,7 @@ fun MainAppContent(
                     },
                     rightActionIcon = rightActionIcon,
                     onRightActionClick = onRightActionClick,
-                    isDarkGreenStyle = (currentTab == BottomTab.ACCOUNT)
+                    isDarkGreenStyle = true
                 )
             },
             bottomBar = {

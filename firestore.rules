@@ -1,110 +1,109 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper function to check if the authenticated user is the owner or active member of a workspace
-    function isWorkspaceMember(workspaceId) {
+    function isWorkspaceOwner(wsId) {
       return request.auth != null && (
-        request.auth.uid == get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerUid ||
-        exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid))
+        (exists(/databases/$(database)/documents/workspaces/$(wsId)) &&
+         get(/databases/$(database)/documents/workspaces/$(wsId)).data.ownerUid == request.auth.uid) ||
+        (exists(/databases/$(database)/documents/collaborationGroups/$(wsId)) &&
+         get(/databases/$(database)/documents/collaborationGroups/$(wsId)).data.ownerUid == request.auth.uid)
       );
     }
 
-    // Users collection - each user can only read/write their own profile
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    function isWorkspaceMember(wsId) {
+      return request.auth != null && (
+        isWorkspaceOwner(wsId) ||
+        exists(/databases/$(database)/documents/workspaces/$(wsId)/members/$(request.auth.uid)) ||
+        exists(/databases/$(database)/documents/collaborationGroups/$(wsId)/members/$(request.auth.uid))
+      );
     }
-    
-    // Phone Account Directory - exact document lookup only (no list enumeration)
-    match /phoneDirectory/{phoneNumber} {
+
+    function isCallerPhone(raw, norm) {
+      return (request.auth.token.phone_number != null &&
+              (raw == request.auth.token.phone_number || norm == request.auth.token.phone_number)) ||
+             (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+              (raw == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.phone ||
+               norm == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.phone));
+    }
+
+    function hasPendingInvitation(grpId) {
+      return request.auth != null && (
+        (request.auth.token.phone_number != null &&
+         exists(/databases/$(database)/documents/collaborationGroups/$(grpId)/pendingPhones/$(request.auth.token.phone_number))) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         exists(/databases/$(database)/documents/collaborationGroups/$(grpId)/pendingPhones/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.phone)))
+      );
+    }
+
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    match /phoneDirectory/{phone} {
       allow get: if request.auth != null;
       allow list: if false;
       allow create, update: if request.auth != null && request.resource.data.uid == request.auth.uid;
       allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
 
-    // User Workspace Memberships - direct discovery index
-    match /userWorkspaceMemberships/{userId}/workspaces/{workspaceId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow create, update, delete: if request.auth != null && (
-        request.auth.uid == userId ||
-        request.auth.uid == get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerUid
-      );
+    match /userWorkspaceMemberships/{uid}/workspaces/{wsId} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isWorkspaceMember(wsId));
+      allow create: if request.auth != null && (isWorkspaceOwner(wsId) || (request.auth.uid == uid && hasPendingInvitation(wsId)));
+      allow update, delete: if request.auth != null && (isWorkspaceOwner(wsId) || request.auth.uid == uid);
     }
 
-    // Collaboration Groups
-    match /collaborationGroups/{groupId} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if request.auth != null && (
-        resource == null || resource.data.ownerUid == request.auth.uid || request.resource.data.ownerUid == request.auth.uid
-      );
-
-      match /members/{memberUid} {
-        allow read: if request.auth != null;
-        allow create, update, delete: if request.auth != null;
-      }
+    match /userCollaborationGroups/{uid}/groups/{grpId} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isWorkspaceMember(grpId));
+      allow create: if request.auth != null && (isWorkspaceOwner(grpId) || (request.auth.uid == uid && hasPendingInvitation(grpId)));
+      allow update, delete: if request.auth != null && (isWorkspaceOwner(grpId) || request.auth.uid == uid);
     }
 
-    // User Collaboration Group discovery index
-    match /userCollaborationGroups/{userId}/groups/{groupId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow create, update, delete: if request.auth != null;
+    match /{path=**}/pendingPhones/{phone} {
+      allow read, delete: if request.auth != null && isCallerPhone(phone, resource.data.normalizedPhone);
     }
-    
-    // Workspace root document
-    match /workspaces/{workspaceId} {
-      allow read: if request.auth != null && (
-        resource == null ||
-        resource.data.ownerUid == request.auth.uid ||
-        exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid))
-      );
+
+    match /collaborationGroups/{grpId} {
+      allow get: if request.auth != null;
+      allow list: if isWorkspaceMember(grpId);
       allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
-      allow update, delete: if request.auth != null && (
-        resource.data.ownerUid == request.auth.uid ||
-        exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid))
-      );
+      allow update, delete: if isWorkspaceOwner(grpId);
 
-      // Members subcollection
-      match /members/{memberId} {
-        allow read: if isWorkspaceMember(workspaceId);
-        allow create, update: if request.auth != null && (isWorkspaceMember(workspaceId) || request.auth.uid == memberId);
-        allow delete: if request.auth != null && (
-          get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerUid == request.auth.uid ||
-          request.auth.uid == memberId
-        );
+      match /members/{targetUid} {
+        allow read: if isWorkspaceMember(grpId) || (request.auth != null && request.auth.uid == targetUid);
+        allow create: if request.auth != null && (isWorkspaceOwner(grpId) || (request.auth.uid == targetUid && request.resource.data.uid == request.auth.uid && hasPendingInvitation(grpId)));
+        allow update, delete: if isWorkspaceOwner(grpId);
       }
 
-      // Settings subcollection
-      match /settings/{docId} {
-        allow read, write: if isWorkspaceMember(workspaceId);
+      match /pendingPhones/{phone} {
+        allow get: if request.auth != null && (isWorkspaceMember(grpId) || isCallerPhone(phone, resource.data.normalizedPhone));
+        allow list: if isWorkspaceMember(grpId);
+        allow create, update: if isWorkspaceOwner(grpId) || (request.auth != null && request.resource.data.addedByUid == request.auth.uid);
+        allow delete: if isWorkspaceOwner(grpId) || (request.auth != null && resource.data.addedByUid == request.auth.uid) || isCallerPhone(phone, resource.data.normalizedPhone);
+      }
+    }
+
+    match /workspaces/{wsId} {
+      allow get: if request.auth != null && (resource == null || isWorkspaceMember(wsId));
+      allow list: if isWorkspaceMember(wsId);
+      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if isWorkspaceOwner(wsId);
+
+      match /members/{targetUid} {
+        allow read: if isWorkspaceMember(wsId) || (request.auth != null && request.auth.uid == targetUid);
+        allow create: if request.auth != null && (isWorkspaceOwner(wsId) || (request.auth.uid == targetUid && request.resource.data.uid == request.auth.uid && hasPendingInvitation(wsId)));
+        allow update, delete: if isWorkspaceOwner(wsId);
       }
 
-      // Attendees subcollection
-      match /attendees/{docId} {
-        allow read, write: if isWorkspaceMember(workspaceId);
+      match /attendees/{attendeeId} {
+        allow read: if isWorkspaceMember(wsId) || hasPendingInvitation(wsId);
+        allow create, delete: if isWorkspaceOwner(wsId);
+        allow update: if isWorkspaceMember(wsId) || (request.auth != null && request.resource.data.partnerUid == request.auth.uid && hasPendingInvitation(wsId));
       }
 
-      // Business Data subcollections (entries, expenses, customers, tractors, withdrawals)
-      match /entries/{entryId} {
-        allow read, write: if isWorkspaceMember(workspaceId);
-      }
-
-      match /expenses/{expenseId} {
-        allow read, write: if isWorkspaceMember(workspaceId);
-      }
-
-      match /customers/{customerId} {
-        allow read, write: if isWorkspaceMember(workspaceId);
-      }
-
-      match /tractors/{tractorId} {
-        allow read, write: if isWorkspaceMember(workspaceId);
-      }
-
-      match /withdrawals/{withdrawalId} {
-        allow read, write: if isWorkspaceMember(workspaceId);
+      match /{subcollection}/{docId} {
+        allow read, write: if isWorkspaceMember(wsId) &&
+          subcollection in ['entries', 'expenses', 'customers', 'tractors', 'withdrawals', 'settings'];
       }
     }
   }
 }
-

@@ -2,6 +2,9 @@ package com.example.ui.screens.report
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -92,6 +95,20 @@ import com.example.ui.theme.SuccessPaidGreen
 import com.example.ui.theme.TextMutedDark
 import com.example.ui.theme.TextSecondaryDark
 
+fun getLocalizedWithdrawalCategory(category: String, isTamil: Boolean): String {
+    if (!isTamil) return category
+    return when (category.trim().lowercase()) {
+        "personal use" -> "தனிப்பட்ட பயன்பாடு"
+        "fuel advance" -> "எரிபொருள் முன்பணம்"
+        "salary" -> "சம்பளம்"
+        "profit share" -> "லாபப் பங்கு"
+        "emergency" -> "அவசர தேவை"
+        "maintenance advance" -> "பராமரிப்பு முன்பணம்"
+        "other" -> "இதர"
+        else -> category
+    }
+}
+
 val WithdrawalCategories = listOf(
     "Personal Use",
     "Fuel Advance",
@@ -114,6 +131,7 @@ fun WithdrawalTab(
     onDeleteWithdrawal: (WithdrawalEntity) -> Unit
 ) {
     val context = LocalContext.current
+    val isTamil = settings.language.equals("TA", ignoreCase = true)
     var showTakeAmountDialog by remember { mutableStateOf(false) }
     var selectedPartnerFilter by remember { mutableStateOf("All") }
     var draftPartnerFilter by remember { mutableStateOf("All") }
@@ -143,7 +161,7 @@ fun WithdrawalTab(
                 name = partner.name,
                 value = amount,
                 color = color,
-                subText = "$count txns"
+                subText = if (isTamil) "$count பரிவர்த்தனைகள்" else "$count txns"
             )
         }
     }
@@ -170,7 +188,11 @@ fun WithdrawalTab(
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Take Amount", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(
+                        text = if (isTamil) "எடுப்புப் பதிவு செய்க" else "Take Amount",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
                 }
 
                 OutlinedButton(
@@ -196,7 +218,11 @@ fun WithdrawalTab(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("PDF Report", color = ForestGreenHeader, fontSize = 13.sp)
+                    Text(
+                        text = if (isTamil) "PDF அறிக்கை" else "PDF Report",
+                        color = ForestGreenHeader,
+                        fontSize = 13.sp
+                    )
                 }
             }
         }
@@ -216,19 +242,29 @@ fun WithdrawalTab(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text("Available Cash Balance", fontSize = 12.sp, color = SageAccent, fontWeight = FontWeight.Medium)
+                            Text(
+                                text = if (isTamil) "கிடைக்கும் ரொக்க இருப்பு" else "Available Cash Balance",
+                                fontSize = 12.sp,
+                                color = SageAccent,
+                                fontWeight = FontWeight.Medium
+                            )
                             Text(formatInr(availableAmount), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = DeepSageGreen)
                         }
 
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("Total Drawings", fontSize = 12.sp, color = SageAccent, fontWeight = FontWeight.Medium)
+                            Text(
+                                text = if (isTamil) "மொத்த எடுப்புகள்" else "Total Drawings",
+                                fontSize = 12.sp,
+                                color = SageAccent,
+                                fontWeight = FontWeight.Medium
+                            )
                             Text(formatInr(totalWithdrawn), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = EarthGold)
                         }
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Calculated as: Total Received Jobs – Total Operating Expenses – Total Partner Drawings",
+                        text = if (isTamil) "கணக்கீடு: மொத்த வேலை வருவாய் – மொத்த செயல்பாட்டுச் செலவுகள் – மொத்த பங்குதாரர் எடுப்புகள்" else "Calculated as: Total Received Jobs – Total Operating Expenses – Total Partner Drawings",
                         fontSize = 11.sp,
                         color = TextSecondaryDark,
                         lineHeight = 15.sp
@@ -259,7 +295,12 @@ fun WithdrawalTab(
                 }
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Filter by Partner:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SageAccent)
+                    Text(
+                        text = if (isTamil) "பங்குதாரர் மூலம் வடிகட்டு:" else "Filter by Partner:",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SageAccent
+                    )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -267,7 +308,7 @@ fun WithdrawalTab(
                         FilterChip(
                             selected = draftPartnerFilter == "All",
                             onClick = { draftPartnerFilter = "All" },
-                            label = { Text("All Partners", fontSize = 11.sp) },
+                            label = { Text(if (isTamil) "அனைத்து பங்குதாரர்கள்" else "All Partners", fontSize = 11.sp) },
                             colors = FilterChipDefaults.filterChipColors(selectedContainerColor = SoftSageGreen)
                         )
                         partners.forEach { partner ->
@@ -294,7 +335,7 @@ fun WithdrawalTab(
         // 5. Partner-Wise Breakdown Cards
         item(key = "section_partner_breakdown_header") {
             Text(
-                text = "Partner Balances & Breakdown",
+                text = if (isTamil) "பங்குதாரர் இருப்பு & விவரம்" else "Partner Balances & Breakdown",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = ForestGreenHeader,
@@ -350,7 +391,7 @@ fun WithdrawalTab(
                                     color = ForestGreenHeader
                                 )
                                 Text(
-                                    text = "$pCount transactions",
+                                    text = if (isTamil) "$pCount பரிவர்த்தனைகள்" else "$pCount transactions",
                                     fontSize = 11.sp,
                                     color = TextMutedDark
                                 )
@@ -365,7 +406,8 @@ fun WithdrawalTab(
                                 color = EarthGold
                             )
                             Text(
-                                text = String.format(java.util.Locale.US, "%.1f%% of drawings", (pPercent * 100).coerceAtLeast(0f)),
+                                text = if (isTamil) String.format(java.util.Locale.US, "எடுப்பில் %.1f%%", (pPercent * 100).coerceAtLeast(0f))
+                                else String.format(java.util.Locale.US, "%.1f%% of drawings", (pPercent * 100).coerceAtLeast(0f)),
                                 fontSize = 11.sp,
                                 color = SageAccent
                             )
@@ -389,7 +431,7 @@ fun WithdrawalTab(
         // 6. Past Withdrawals List Header
         item(key = "section_past_withdrawals_header") {
             Text(
-                text = "Past Withdrawals Ledger",
+                text = if (isTamil) "கடந்த எடுப்புப் பதிவேடு" else "Past Withdrawals Ledger",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = ForestGreenHeader,
@@ -419,14 +461,14 @@ fun WithdrawalTab(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "No withdrawal records found",
+                            text = if (isTamil) "எடுப்புப் பதிவுகள் எதுவும் இல்லை" else "No withdrawal records found",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                             color = ForestGreenHeader,
                             textAlign = TextAlign.Center
                         )
                         Text(
-                            text = "Tap '+ Take Amount' above to record cash drawings",
+                            text = if (isTamil) "பண எடுப்புகளைப் பதிவு செய்ய மேலே உள்ள '+ எடுப்புப் பதிவு செய்க' பொத்தானைத் தட்டவும்" else "Tap '+ Take Amount' above to record cash drawings",
                             fontSize = 11.sp,
                             color = TextMutedDark,
                             textAlign = TextAlign.Center
@@ -438,6 +480,7 @@ fun WithdrawalTab(
             items(filteredWithdrawals, key = { "withdrawal_entry_${it.id}_${it.timestamp}" }) { w ->
                 WithdrawalItemCard(
                     withdrawal = w,
+                    isTamil = isTamil,
                     onDelete = { withdrawalToDelete = w },
                     onShareWhatsApp = {
                         val shareText = buildWithdrawalWhatsAppMessage(w, settings.businessName)
@@ -455,7 +498,7 @@ fun WithdrawalTab(
             currentPartnerName = settings.activePartnerName.split(" ").firstOrNull() ?: "",
             availableAmount = availableAmount,
             currency = settings.currency,
-            isTamil = settings.language.equals("TA", ignoreCase = true),
+            isTamil = isTamil,
             onDismiss = { showTakeAmountDialog = false },
             onConfirm = { withdrawal ->
                 onAddWithdrawal(withdrawal)
@@ -468,9 +511,12 @@ fun WithdrawalTab(
     withdrawalToDelete?.let { w ->
         AlertDialog(
             onDismissRequest = { withdrawalToDelete = null },
-            title = { Text("Delete Withdrawal Record?", fontWeight = FontWeight.Bold, color = ForestGreenHeader) },
+            title = { Text(if (isTamil) "எடுப்புப் பதிவை நீக்கவா?" else "Delete Withdrawal Record?", fontWeight = FontWeight.Bold, color = ForestGreenHeader) },
             text = {
-                Text("Are you sure you want to delete the withdrawal entry of ${formatInr(w.amount)} taken by ${w.partnerName}?")
+                Text(
+                    text = if (isTamil) "${w.partnerName} என்பவரால் எடுக்கப்பட்ட ரூ. ${formatInr(w.amount)} எடுப்புப் பதிவை நிச்சயமாக நீக்க விரும்புகிறீர்களா?"
+                    else "Are you sure you want to delete the withdrawal entry of ${formatInr(w.amount)} taken by ${w.partnerName}?"
+                )
             },
             confirmButton = {
                 Button(
@@ -480,12 +526,12 @@ fun WithdrawalTab(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = AlertDueRed)
                 ) {
-                    Text("Delete")
+                    Text(if (isTamil) "நீக்கு" else "Delete")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { withdrawalToDelete = null }) {
-                    Text("Cancel")
+                    Text(if (isTamil) "ரத்து" else "Cancel")
                 }
             }
         )
@@ -495,6 +541,7 @@ fun WithdrawalTab(
 @Composable
 fun WithdrawalItemCard(
     withdrawal: WithdrawalEntity,
+    isTamil: Boolean = false,
     onDelete: () -> Unit,
     onShareWhatsApp: () -> Unit
 ) {
@@ -553,13 +600,13 @@ fun WithdrawalItemCard(
 
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Category: ${withdrawal.category}",
+                        text = if (isTamil) "காரணம்/வகை: ${getLocalizedWithdrawalCategory(withdrawal.category, isTamil)}" else "Category: ${withdrawal.category}",
                         fontSize = 12.sp,
                         color = TextSecondaryDark
                     )
                     if (withdrawal.note.isNotBlank()) {
                         Text(
-                            text = "Note: ${withdrawal.note}",
+                            text = if (isTamil) "குறிப்பு: ${withdrawal.note}" else "Note: ${withdrawal.note}",
                             fontSize = 11.sp,
                             color = TextMutedDark,
                             maxLines = 1
@@ -591,7 +638,7 @@ fun WithdrawalItemCard(
                     FlatShareIconButton(
                         onClick = onShareWhatsApp,
                         modifier = Modifier.testTag("btn_share_withdrawal_${withdrawal.id}"),
-                        contentDescription = "Share Withdrawal via WhatsApp",
+                        contentDescription = if (isTamil) "வாட்ஸ்அப் மூலம் பகிரவும்" else "Share Withdrawal via WhatsApp",
                         tint = SuccessPaidGreen,
                         iconSize = 20.dp
                     )
@@ -660,7 +707,10 @@ fun TakeAmountDialog(
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .imePadding(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // Available Balance Indicator Banner
@@ -769,7 +819,7 @@ fun TakeAmountDialog(
                     onExpandedChange = { if (!isSubmitting) categoryDropdownExpanded = !categoryDropdownExpanded }
                 ) {
                     OutlinedTextField(
-                        value = selectedCategory,
+                        value = getLocalizedWithdrawalCategory(selectedCategory, isTamil),
                         onValueChange = {},
                         readOnly = true,
                         label = { Text(if (isTamil) "காரணம் / வகை" else "Category / Purpose") },
@@ -785,7 +835,7 @@ fun TakeAmountDialog(
                     ) {
                         WithdrawalCategories.forEach { cat ->
                             DropdownMenuItem(
-                                text = { Text(cat) },
+                                text = { Text(getLocalizedWithdrawalCategory(cat, isTamil)) },
                                 onClick = {
                                     selectedCategory = cat
                                     categoryDropdownExpanded = false

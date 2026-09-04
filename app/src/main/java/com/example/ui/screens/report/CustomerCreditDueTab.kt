@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import com.example.ui.components.shareGenericText
+import com.example.ui.theme.AppTheme
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -146,6 +147,48 @@ enum class CreditDueDateFilter(val label: String) {
     CUSTOM("📅 Pick Dates")
 }
 
+fun getLocalizedSortOrder(order: CreditDueSortOrder, isTamil: Boolean): String {
+    if (!isTamil) return order.label
+    return when (order) {
+        CreditDueSortOrder.HIGH_TO_LOW -> "அதிகம் முதல் குறைவு"
+        CreditDueSortOrder.LOW_TO_HIGH -> "குறைவு முதல் அதிகம்"
+        CreditDueSortOrder.RECENT -> "சமீபத்திய"
+    }
+}
+
+fun getLocalizedStatusFilter(filter: CreditDueStatusFilter, isTamil: Boolean): String {
+    if (!isTamil) return filter.label
+    return when (filter) {
+        CreditDueStatusFilter.ALL -> "அனைத்தும்"
+        CreditDueStatusFilter.PENDING_DUE -> "நிலுவை உள்ளவை"
+        CreditDueStatusFilter.PAID -> "முழுமையாக செலுத்தியவை"
+    }
+}
+
+fun getLocalizedDateFilter(filter: CreditDueDateFilter, isTamil: Boolean): String {
+    if (!isTamil) return filter.label
+    return when (filter) {
+        CreditDueDateFilter.ALL -> "அனைத்து காலம்"
+        CreditDueDateFilter.TODAY -> "இன்று"
+        CreditDueDateFilter.THIS_WEEK -> "இந்த வாரம்"
+        CreditDueDateFilter.THIS_MONTH -> "இந்த மாதம்"
+        CreditDueDateFilter.LAST_30_DAYS -> "கடந்த 30 நாட்கள்"
+        CreditDueDateFilter.THIS_YEAR -> "இந்த ஆண்டு"
+        CreditDueDateFilter.CUSTOM -> "📅 தேதியைத் தேர்ந்தெடு"
+    }
+}
+
+fun getLocalizedPaymentMethod(method: String, isTamil: Boolean): String {
+    if (!isTamil) return method
+    return when (method) {
+        "Cash" -> "ரொக்கம்"
+        "UPI / GPay" -> "யுபிஐ / ஜிபே"
+        "Bank Transfer" -> "வங்கி கணக்கு"
+        "Cheque" -> "காசோலை"
+        else -> method
+    }
+}
+
 @Composable
 fun CustomerCreditDueTab(
     settings: AppSettingsEntity,
@@ -155,6 +198,7 @@ fun CustomerCreditDueTab(
     onRecordPayment: ((CustomerEntity, Double, Long, String, String) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val isTamil = settings.language == "TA"
     var searchQuery by remember { mutableStateOf("") }
     var selectedSortOrder by remember { mutableStateOf(CreditDueSortOrder.HIGH_TO_LOW) }
     var selectedStatusFilter by remember { mutableStateOf(CreditDueStatusFilter.ALL) }
@@ -345,7 +389,7 @@ fun CustomerCreditDueTab(
                     modifier = Modifier.weight(1f)
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text("Total Outstanding Dues", fontSize = 11.sp, color = AlertDueRed, fontWeight = FontWeight.SemiBold)
+                        Text(if (isTamil) "மொத்த நிலுவைத் தொகை" else "Total Outstanding Dues", fontSize = 11.sp, color = AlertDueRed, fontWeight = FontWeight.SemiBold)
                         Text(formatInr(totalOutstanding, settings.currency), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AlertDueRed)
                     }
                 }
@@ -366,7 +410,7 @@ fun CustomerCreditDueTab(
                 ) {
                     Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = AlertDueRed, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Bulk Export", color = ForestGreenHeader)
+                    Text(if (isTamil) "பதிவிறக்கு" else "Bulk Export", color = ForestGreenHeader)
                 }
             }
         }
@@ -376,7 +420,7 @@ fun CustomerCreditDueTab(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Search customer name, phone, village...") },
+                placeholder = { Text(if (isTamil) "வாடிக்கையாளர் பெயர், மொபைல், ஊர்..." else "Search customer name, phone, village...") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = SageAccent) },
                 singleLine = true,
                 modifier = Modifier
@@ -418,12 +462,12 @@ fun CustomerCreditDueTab(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Tune,
-                                contentDescription = "Filters",
+                                contentDescription = if (isTamil) "வடிகட்டிகள்" else "Filters",
                                 tint = ForestGreenHeader,
                                 modifier = Modifier.size(20.dp)
                             )
                             Text(
-                                text = "Filters & Sorting",
+                                text = if (isTamil) "வடிகட்டுதல் & வரிசைப்படுத்துதல்" else "Filters & Sorting",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = ForestGreenHeader
@@ -461,7 +505,7 @@ fun CustomerCreditDueTab(
                                 ) {
                                     Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(14.dp), tint = SageAccent)
                                     Spacer(modifier = Modifier.width(3.dp))
-                                    Text("Reset", fontSize = 11.sp, color = SageAccent, fontWeight = FontWeight.Bold)
+                                    Text(if (isTamil) "மீட்டமை" else "Reset", fontSize = 11.sp, color = SageAccent, fontWeight = FontWeight.Bold)
                                 }
                             }
 
@@ -471,7 +515,11 @@ fun CustomerCreditDueTab(
                             ) {
                                 Icon(
                                     imageVector = if (isFilterExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                    contentDescription = if (isFilterExpanded) "Collapse Filters" else "Expand Filters",
+                                    contentDescription = if (isFilterExpanded) {
+                                        if (isTamil) "வடிகட்டிகளை சுருக்குக" else "Collapse Filters"
+                                    } else {
+                                        if (isTamil) "வடிகட்டிகளை விரிக்கவும்" else "Expand Filters"
+                                    },
                                     tint = ForestGreenHeader
                                 )
                             }
@@ -502,7 +550,7 @@ fun CustomerCreditDueTab(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Icon(Icons.Default.FilterList, contentDescription = null, tint = ForestGreenHeader, modifier = Modifier.size(16.dp))
-                                    Text("Status:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreenHeader)
+                                    Text(if (isTamil) "நிலை:" else "Status:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreenHeader)
                                 }
 
                                 LazyRow(
@@ -523,7 +571,7 @@ fun CustomerCreditDueTab(
                                             modifier = Modifier.clickable { selectedStatusFilter = statusFilter }
                                         ) {
                                             Text(
-                                                text = "${statusFilter.label} ($count)",
+                                                text = "${getLocalizedStatusFilter(statusFilter, isTamil)} ($count)",
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = if (isSelected) Color.White else ForestGreenHeader,
@@ -547,7 +595,7 @@ fun CustomerCreditDueTab(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Icon(Icons.Default.Sort, contentDescription = null, tint = ForestGreenHeader, modifier = Modifier.size(16.dp))
-                                    Text("Sort:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreenHeader)
+                                    Text(if (isTamil) "வரிசைப்படுத்து:" else "Sort:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreenHeader)
                                 }
 
                                 LazyRow(
@@ -579,7 +627,7 @@ fun CustomerCreditDueTab(
                                                     modifier = Modifier.size(12.dp)
                                                 )
                                                 Text(
-                                                    text = sortOrder.label,
+                                                    text = getLocalizedSortOrder(sortOrder, isTamil),
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.SemiBold,
                                                     color = if (isSelected) Color.White else ForestGreenHeader
@@ -604,7 +652,7 @@ fun CustomerCreditDueTab(
                                     modifier = Modifier.clickable { showCustomDatePickers() }
                                 ) {
                                     Icon(Icons.Default.CalendarMonth, contentDescription = "Calendar Picker", tint = ForestGreenHeader, modifier = Modifier.size(16.dp))
-                                    Text("Calendar:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreenHeader)
+                                    Text(if (isTamil) "காலம்:" else "Calendar:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ForestGreenHeader)
                                 }
 
                                 LazyRow(
@@ -616,7 +664,7 @@ fun CustomerCreditDueTab(
                                         val label = if (filter == CreditDueDateFilter.CUSTOM && selectedDateFilter == CreditDueDateFilter.CUSTOM) {
                                             "${formatDate(customStartDateMillis)} - ${formatDate(customEndDateMillis)}"
                                         } else {
-                                            filter.label
+                                            getLocalizedDateFilter(filter, isTamil)
                                         }
 
                                         Surface(
@@ -670,9 +718,9 @@ fun CustomerCreditDueTab(
                             Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = DeepSageGreen, modifier = Modifier.size(16.dp))
                             Text(
                                 text = if (selectedDateFilter == CreditDueDateFilter.CUSTOM) {
-                                    "Calendar: ${formatDate(customStartDateMillis)} – ${formatDate(customEndDateMillis)}"
+                                    if (isTamil) "நாட்காட்டி: ${formatDate(customStartDateMillis)} – ${formatDate(customEndDateMillis)}" else "Calendar: ${formatDate(customStartDateMillis)} – ${formatDate(customEndDateMillis)}"
                                 } else {
-                                    "Calendar Filter: ${selectedDateFilter.label}"
+                                    if (isTamil) "வடிகட்டி: ${getLocalizedDateFilter(selectedDateFilter, isTamil)}" else "Calendar Filter: ${selectedDateFilter.label}"
                                 },
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -688,13 +736,13 @@ fun CustomerCreditDueTab(
                                 onClick = { showCustomDatePickers() },
                                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                             ) {
-                                Text("Change", fontSize = 11.sp, color = DeepSageGreen, fontWeight = FontWeight.Bold)
+                                Text(if (isTamil) "மாற்று" else "Change", fontSize = 11.sp, color = DeepSageGreen, fontWeight = FontWeight.Bold)
                             }
                             IconButton(
                                 onClick = { selectedDateFilter = CreditDueDateFilter.ALL },
                                 modifier = Modifier.size(24.dp)
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = ForestGreenHeader, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Default.Close, contentDescription = if (isTamil) "அழி" else "Clear", tint = ForestGreenHeader, modifier = Modifier.size(14.dp))
                             }
                         }
                     }
@@ -710,9 +758,9 @@ fun CustomerCreditDueTab(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val headerTitle = when (selectedStatusFilter) {
-                    CreditDueStatusFilter.ALL -> "All Customer Accounts (${filteredCustomers.size})"
-                    CreditDueStatusFilter.PENDING_DUE -> "Customers with Outstanding Due (${filteredCustomers.size})"
-                    CreditDueStatusFilter.PAID -> "Fully Paid Customers (${filteredCustomers.size})"
+                    CreditDueStatusFilter.ALL -> if (isTamil) "அனைத்து வாடிக்கையாளர்கள் (${filteredCustomers.size})" else "All Customer Accounts (${filteredCustomers.size})"
+                    CreditDueStatusFilter.PENDING_DUE -> if (isTamil) "நிலுவைத் தொகை உள்ளவர்கள் (${filteredCustomers.size})" else "Customers with Outstanding Due (${filteredCustomers.size})"
+                    CreditDueStatusFilter.PAID -> if (isTamil) "முழுமையாக செலுத்தியவர்கள் (${filteredCustomers.size})" else "Fully Paid Customers (${filteredCustomers.size})"
                 }
                 Text(
                     text = headerTitle,
@@ -723,7 +771,7 @@ fun CustomerCreditDueTab(
 
                 if (selectedDateFilter != CreditDueDateFilter.ALL || selectedSortOrder != CreditDueSortOrder.HIGH_TO_LOW || selectedStatusFilter != CreditDueStatusFilter.ALL) {
                     Text(
-                        text = "Filtered",
+                        text = if (isTamil) "வடிகட்டப்பட்டது" else "Filtered",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = SageAccent
@@ -744,11 +792,11 @@ fun CustomerCreditDueTab(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         if (selectedStatusFilter == CreditDueStatusFilter.PAID) {
-                            Text("No fully paid customers found in this filter", fontWeight = FontWeight.Bold, color = DeepSageGreen)
-                            Text("Customers with ₹0 balance will appear here.", fontSize = 12.sp, color = SageAccent)
+                            Text(if (isTamil) "வடிகட்டலில் முழுமையாக செலுத்திய வாடிக்கையாளர்கள் யாரும் இல்லை" else "No fully paid customers found in this filter", fontWeight = FontWeight.Bold, color = DeepSageGreen, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            Text(if (isTamil) "₹0 இருப்பு உள்ள வாடிக்கையாளர்கள் இங்கு தோன்றுவர்." else "Customers with ₹0 balance will appear here.", fontSize = 12.sp, color = SageAccent, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         } else {
-                            Text("No matching records found! 🎉", fontWeight = FontWeight.Bold, color = DeepSageGreen)
-                            Text("All accounts are settled or match filter.", fontSize = 12.sp, color = SageAccent)
+                            Text(if (isTamil) "பொருந்தும் பதிவுகள் எதுவும் இல்லை! 🎉" else "No matching records found! 🎉", fontWeight = FontWeight.Bold, color = DeepSageGreen, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            Text(if (isTamil) "அனைத்து கணக்குகளும் தீர்க்கப்பட்டுள்ளன அல்லது வடித்தலுடன் பொருந்துகின்றன." else "All accounts are settled or match filter.", fontSize = 12.sp, color = SageAccent, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         }
                     }
                 }
@@ -757,6 +805,7 @@ fun CustomerCreditDueTab(
             items(filteredCustomers, key = { it.id }) { customer ->
                 CustomerCreditDueCard(
                     customer = customer,
+                    isTamil = isTamil,
                     onClick = { selectedCustomer = customer },
                     onAddPayment = { customerForPayment = customer },
                     onShareWhatsApp = { shareCustomerDueWhatsApp(context, customer, settings.businessName) },
@@ -804,7 +853,7 @@ fun CustomerCreditDueTab(
                 if (currentCustomer.phone.isNotBlank()) {
                     openDialer(context, currentCustomer.phone)
                 } else {
-                    Toast.makeText(context, "No phone number saved for ${currentCustomer.name}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, if (isTamil) "${currentCustomer.name} கைபேசி எண் சேமிக்கப்படவில்லை" else "No phone number saved for ${currentCustomer.name}", Toast.LENGTH_SHORT).show()
                     customerToEditPhone = currentCustomer
                 }
             },
@@ -865,7 +914,7 @@ fun CustomerCreditDueTab(
             onDismissRequest = { customerToEditPhone = null },
             title = {
                 Text(
-                    text = if (customer.phone.isBlank()) "Add Phone Number" else "Edit Phone Number",
+                    text = if (isTamil) (if (customer.phone.isBlank()) "கைபேசி எண் சேர்க்க" else "கைபேசி எண் திருத்த") else (if (customer.phone.isBlank()) "Add Phone Number" else "Edit Phone Number"),
                     fontWeight = FontWeight.Bold,
                     color = ForestGreenHeader
                 )
@@ -873,13 +922,13 @@ fun CustomerCreditDueTab(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Customer: ${customer.name}",
+                        text = if (isTamil) "வாடிக்கையாளர்: ${customer.name}" else "Customer: ${customer.name}",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = DeepSageGreen
                     )
                     Text(
-                        text = "Enter a valid 10-digit mobile number for WhatsApp messaging and statements.",
+                        text = if (isTamil) "வாட்ஸ்அப் மற்றும் அறிக்கை விவரங்களை அனுப்ப செல்லுபடியாகும் 10 இலக்க மொபைல் எண்ணை உள்ளிடவும்." else "Enter a valid 10-digit mobile number for WhatsApp messaging and statements.",
                         fontSize = 12.sp,
                         color = TextSecondaryDark
                     )
@@ -889,18 +938,18 @@ fun CustomerCreditDueTab(
                             phoneInput = it
                             phoneError = false
                         },
-                        label = { Text("10-Digit Mobile Number") },
+                        label = { Text(if (isTamil) "10-இலக்க மொபைல் எண்" else "10-Digit Mobile Number") },
                         leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = DeepSageGreen) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                         singleLine = true,
                         isError = phoneError,
                         supportingText = {
                             if (phoneError) {
-                                Text("Please enter a valid 10-digit number", color = AlertDueRed)
+                                Text(if (isTamil) "செல்லுபடியாகும் 10 இலக்க எண்ணை உள்ளிடவும்" else "Please enter a valid 10-digit number", color = AlertDueRed)
                             } else {
                                 val clean = sanitizePhoneNumberForStorage(phoneInput)
                                 if (clean.length == 10) {
-                                    Text("Valid mobile number: +91 $clean", color = SuccessPaidGreen)
+                                    Text(if (isTamil) "சரியான மொபைல் எண்: +91 $clean" else "Valid mobile number: +91 $clean", color = SuccessPaidGreen)
                                 }
                             }
                         },
@@ -925,17 +974,17 @@ fun CustomerCreditDueTab(
                                 selectedCustomer = updatedCustomer
                             }
                             customerToEditPhone = null
-                            Toast.makeText(context, "Phone number updated to $sanitized", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, if (isTamil) "கைபேசி எண் $sanitized ஆக மாற்றப்பட்டது" else "Phone number updated to $sanitized", Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = DeepSageGreen)
                 ) {
-                    Text("Save Phone")
+                    Text(if (isTamil) "சேமி" else "Save Phone")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { customerToEditPhone = null }) {
-                    Text("Cancel")
+                    Text(if (isTamil) "ரத்து" else "Cancel")
                 }
             }
         )
@@ -950,18 +999,25 @@ fun shareCustomerDueWhatsApp(context: Context, customer: CustomerEntity, busines
 @Composable
 fun CustomerCreditDueCard(
     customer: CustomerEntity,
+    isTamil: Boolean = false,
     onClick: () -> Unit,
     onAddPayment: () -> Unit,
     onShareWhatsApp: () -> Unit,
     onSharePdf: () -> Unit
 ) {
+    val responsive = com.example.ui.theme.rememberResponsiveDimensions()
     val isPaid = customer.balanceDue <= 0.0
+    val initials = customer.name.trim().take(2).uppercase().ifBlank { "C" }
 
     Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(if (isPaid) SuccessPaidGreen.copy(alpha = 0.3f) else SageOutline.copy(alpha = 0.5f))),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = AppTheme.colors.cardBg),
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = androidx.compose.ui.graphics.SolidColor(
+                if (isPaid) SuccessPaidGreen.copy(alpha = 0.35f) else AppTheme.colors.cardBorder.copy(alpha = 0.7f)
+            )
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
@@ -970,29 +1026,35 @@ fun CustomerCreditDueCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp)
+                .padding(if (responsive.isSmallPhone) 12.dp else 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Top Row: Avatar + Name & Location + Status / Due Amount
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Customer Avatar Circle with Initials
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(if (responsive.isSmallPhone) 42.dp else 46.dp)
                         .clip(CircleShape)
                         .background(if (isPaid) SuccessPaidGreenBg else AlertDueRedBg),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = customer.name.take(1).uppercase(),
+                        text = initials,
                         color = if (isPaid) SuccessPaidGreen else AlertDueRed,
-                        fontSize = 16.sp,
+                        fontSize = if (responsive.isSmallPhone) 14.sp else 15.5.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
 
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1000,9 +1062,11 @@ fun CustomerCreditDueCard(
                     ) {
                         Text(
                             text = customer.name,
-                            fontSize = 15.sp,
+                            fontSize = if (responsive.isSmallPhone) 15.sp else 16.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = ForestGreenHeader,
+                            color = AppTheme.colors.textPrimary,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
                         )
 
@@ -1024,7 +1088,7 @@ fun CustomerCreditDueCard(
                                         modifier = Modifier.size(12.dp)
                                     )
                                     Text(
-                                        text = "PAID",
+                                        text = if (isTamil) "செலுத்தப்பட்டது" else "PAID",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = SuccessPaidGreen
@@ -1034,144 +1098,133 @@ fun CustomerCreditDueCard(
                         } else {
                             Text(
                                 text = formatInr(customer.balanceDue),
-                                fontSize = 15.sp,
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = AlertDueRed
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(2.dp))
-
-                    if (customer.location.isNotBlank()) {
-                        Text(
-                            text = customer.location,
-                            fontSize = 12.sp,
-                            color = TextSecondaryDark
-                        )
+                    if (customer.location.isNotBlank() || customer.phone.isNotBlank()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            if (customer.location.isNotBlank()) {
+                                Icon(
+                                    imageVector = Icons.Default.LocationOn,
+                                    contentDescription = null,
+                                    tint = DeepSageGreen,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    text = customer.location,
+                                    fontSize = 12.sp,
+                                    color = AppTheme.colors.textSecondary,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                            }
+                            if (customer.phone.isNotBlank()) {
+                                if (customer.location.isNotBlank()) {
+                                    Text("•", fontSize = 10.sp, color = AppTheme.colors.textMuted)
+                                }
+                                Text(
+                                    text = customer.phone,
+                                    fontSize = 12.sp,
+                                    color = AppTheme.colors.textSecondary,
+                                    maxLines = 1
+                                )
+                            }
+                        }
                     }
-
-                    Text(
-                        text = "Billed: ${formatInr(customer.totalBilled)} • Paid: ${formatInr(customer.totalPaid)}",
-                        fontSize = 11.sp,
-                        color = TextMutedDark
-                    )
                 }
 
                 Icon(
                     imageVector = Icons.Default.ChevronRight,
                     contentDescription = null,
-                    tint = TextMutedDark
+                    tint = AppTheme.colors.textMuted
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-            Divider(color = SageOutline.copy(alpha = 0.4f))
-            Spacer(modifier = Modifier.height(8.dp))
+            // Middle Stats Row: Billed & Paid Summary
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = if (AppTheme.colors.isDark) Color(0xFF1E2320) else Color(0xFFF3F7F4),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isTamil) "மொத்த பில்: ${formatInr(customer.totalBilled)}" else "Total Billed: ${formatInr(customer.totalBilled)}",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = AppTheme.colors.textSecondary
+                    )
+                    Text(
+                        text = if (isTamil) "செலுத்தியது: ${formatInr(customer.totalPaid)}" else "Paid: ${formatInr(customer.totalPaid)}",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SuccessPaidGreen
+                    )
+                }
+            }
 
+            Divider(color = AppTheme.colors.cardBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+
+            // Bottom Actions: Share buttons + Payment / Statement
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isPaid) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = SuccessPaidGreen,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = "Account Settled",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = SuccessPaidGreen
-                        )
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(18.dp)
-                        ) {
-                            FlatShareIconButton(
-                                onClick = onShareWhatsApp,
-                                modifier = Modifier.testTag("btn_share_customer_card_${customer.id}"),
-                                contentDescription = "Share via WhatsApp",
-                                tint = SuccessPaidGreen,
-                                iconSize = 20.dp
-                            )
-
-                            FlatPdfIconButton(
-                                onClick = onSharePdf,
-                                modifier = Modifier.testTag("btn_pdf_customer_card_${customer.id}"),
-                                contentDescription = "Share Statement PDF",
-                                tint = DeepSageGreen,
-                                iconSize = 20.dp
-                            )
-                        }
-
-                        TextButton(
-                            onClick = onClick,
-                            modifier = Modifier.testTag("btn_view_statement_card_${customer.id}")
-                        ) {
-                            Text("Statement", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DeepSageGreen)
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(14.dp), tint = DeepSageGreen)
-                        }
-                    }
-                } else {
-                    Text(
-                        text = "Due: ${formatInr(customer.balanceDue)}",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = AlertDueRed
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    FlatShareIconButton(
+                        onClick = onShareWhatsApp,
+                        modifier = Modifier.testTag("btn_share_customer_card_${customer.id}"),
+                        contentDescription = if (isTamil) "வாட்ஸ்அப் மூலம் பகிரவும்" else "Share via WhatsApp",
+                        tint = SuccessPaidGreen,
+                        iconSize = 20.dp
                     )
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    FlatPdfIconButton(
+                        onClick = onSharePdf,
+                        modifier = Modifier.testTag("btn_pdf_customer_card_${customer.id}"),
+                        contentDescription = if (isTamil) "அறிக்கை PDF ஆக பகிரவும்" else "Share Statement PDF",
+                        tint = DeepSageGreen,
+                        iconSize = 20.dp
+                    )
+                }
+
+                if (isPaid) {
+                    TextButton(
+                        onClick = onClick,
+                        modifier = Modifier.testTag("btn_view_statement_card_${customer.id}")
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(18.dp)
-                        ) {
-                            FlatShareIconButton(
-                                onClick = onShareWhatsApp,
-                                modifier = Modifier.testTag("btn_share_customer_card_${customer.id}"),
-                                contentDescription = "Share via WhatsApp",
-                                tint = SuccessPaidGreen,
-                                iconSize = 20.dp
-                            )
-
-                            FlatPdfIconButton(
-                                onClick = onSharePdf,
-                                modifier = Modifier.testTag("btn_pdf_customer_card_${customer.id}"),
-                                contentDescription = "Share Statement PDF",
-                                tint = DeepSageGreen,
-                                iconSize = 20.dp
-                            )
-                        }
-
-                        Button(
-                            onClick = onAddPayment,
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = SuccessPaidGreen),
-                            modifier = Modifier
-                                .height(36.dp)
-                                .testTag("btn_add_payment_card_${customer.id}")
-                        ) {
-                            Icon(Icons.Default.Paid, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Add Payment", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
+                        Text(if (isTamil) "அறிக்கை விவரம்" else "Statement", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = DeepSageGreen)
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(14.dp), tint = DeepSageGreen)
+                    }
+                } else {
+                    Button(
+                        onClick = onAddPayment,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = SuccessPaidGreen),
+                        modifier = Modifier
+                            .height(36.dp)
+                            .testTag("btn_add_payment_card_${customer.id}")
+                    ) {
+                        Icon(Icons.Default.Paid, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isTamil) "பணம் சேர்க்க" else "Add Payment", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1192,6 +1245,7 @@ fun CustomerDetailSheet(
     onSharePdf: () -> Unit,
     onEditPhone: () -> Unit = {}
 ) {
+    val isTamil = settings.language == "TA"
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val workJobs = jobs.filter { it.tractorLabel != "Payment" }
     val totalMinutes = workJobs.sumOf { it.durationMinutes }
@@ -1228,7 +1282,11 @@ fun CustomerDetailSheet(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = if (customer.phone.isNotBlank()) "Phone: ${customer.phone} ${if (customer.location.isNotBlank()) "• " + customer.location else ""}" else "No phone number saved",
+                                text = if (customer.phone.isNotBlank()) {
+                                    "${if (isTamil) "கைபேசி" else "Phone"}: ${customer.phone} ${if (customer.location.isNotBlank()) "• " + customer.location else ""}"
+                                } else {
+                                    if (isTamil) "கைபேசி எண் சேமிக்கப்படவில்லை" else "No phone number saved"
+                                },
                                 fontSize = 12.sp,
                                 color = if (customer.phone.isNotBlank()) TextSecondaryDark else AlertDueRed
                             )
@@ -1238,7 +1296,7 @@ fun CustomerDetailSheet(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Edit,
-                                    contentDescription = "Edit Phone",
+                                    contentDescription = if (isTamil) "கைபேசி எண்ணைத் திருத்து" else "Edit Phone",
                                     tint = DeepSageGreen,
                                     modifier = Modifier.size(14.dp)
                                 )
@@ -1265,7 +1323,7 @@ fun CustomerDetailSheet(
                         ) {
                             Icon(Icons.Default.Paid, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Add Payment (Collect Due)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(if (isTamil) "பணம் சேர்க்க (நிலுவை வசூல்)" else "Add Payment (Collect Due)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
                     }
 
@@ -1284,7 +1342,7 @@ fun CustomerDetailSheet(
                         ) {
                             Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Call", fontSize = 12.sp, maxLines = 1)
+                            Text(if (isTamil) "அழை" else "Call", fontSize = 12.sp, maxLines = 1)
                         }
 
                         Button(
@@ -1298,7 +1356,7 @@ fun CustomerDetailSheet(
                         ) {
                             Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("WhatsApp", fontSize = 12.sp, maxLines = 1)
+                            Text(if (isTamil) "வாட்ஸ்அப்" else "WhatsApp", fontSize = 12.sp, maxLines = 1)
                         }
 
                         Button(
@@ -1313,7 +1371,7 @@ fun CustomerDetailSheet(
                         ) {
                             Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Share PDF", fontSize = 12.sp, maxLines = 1)
+                            Text(if (isTamil) "பகிர்க (PDF)" else "Share PDF", fontSize = 12.sp, maxLines = 1)
                         }
                     }
                 }
@@ -1330,11 +1388,11 @@ fun CustomerDetailSheet(
                         modifier = Modifier.padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        DetailRow(label = "Total Work Billed", value = formatInr(customer.totalBilled))
-                        DetailRow(label = "Total Amount Paid", value = formatInr(customer.totalPaid))
-                        DetailRow(label = "Total Hours Worked", value = com.example.ui.util.WorkBillingCalculator.formatDuration(totalMinutes))
-                        DetailRow(label = "Tractors Used", value = tractorsUsed)
-                        DetailRow(label = "Operators", value = operators)
+                        DetailRow(label = if (isTamil) "மொத்த பில் தொகை" else "Total Work Billed", value = formatInr(customer.totalBilled))
+                        DetailRow(label = if (isTamil) "மொத்த செலுத்திய தொகை" else "Total Amount Paid", value = formatInr(customer.totalPaid))
+                        DetailRow(label = if (isTamil) "வேலை செய்த மொத்த நேரம்" else "Total Hours Worked", value = com.example.ui.util.WorkBillingCalculator.formatDuration(totalMinutes))
+                        DetailRow(label = if (isTamil) "பயன்படுத்தப்பட்ட டிராக்டர்கள்" else "Tractors Used", value = tractorsUsed)
+                        DetailRow(label = if (isTamil) "இயக்குநர்கள்" else "Operators", value = operators)
 
                         Divider(modifier = Modifier.padding(vertical = 4.dp))
 
@@ -1342,7 +1400,7 @@ fun CustomerDetailSheet(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Outstanding Balance Due:", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AlertDueRed)
+                            Text(if (isTamil) "நிலுவைத் தொகை:" else "Outstanding Balance Due:", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AlertDueRed)
                             Text(formatInr(customer.balanceDue), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AlertDueRed)
                         }
                     }
@@ -1352,7 +1410,7 @@ fun CustomerDetailSheet(
             // Transaction / Job History
             item {
                 Text(
-                    text = "Transaction & Payment History (${jobs.size})",
+                    text = if (isTamil) "பரிவர்த்தனை & கட்டண வரலாறு (${jobs.size})" else "Transaction & Payment History (${jobs.size})",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = ForestGreenHeader
@@ -1361,7 +1419,7 @@ fun CustomerDetailSheet(
 
             if (jobs.isEmpty()) {
                 item {
-                    Text("No job records recorded under this customer.", fontSize = 12.sp, color = TextMutedDark)
+                    Text(if (isTamil) "இந்த வாடிக்கையாளருக்கு எந்த வேலை பதிவும் இல்லை." else "No job records recorded under this customer.", fontSize = 12.sp, color = TextMutedDark)
                 }
             } else {
                 items(jobs) { job ->
@@ -1397,7 +1455,11 @@ fun CustomerDetailSheet(
                                         )
                                     }
                                     Text(
-                                        job.workType,
+                                        text = if (isTamil && (job.workType == "Payment Received" || job.tractorLabel == "Payment")) {
+                                            "கட்டணம் பெறப்பட்டது"
+                                        } else {
+                                            job.workType
+                                        },
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (isPayment) SuccessPaidGreen else ForestGreenHeader
@@ -1414,14 +1476,14 @@ fun CustomerDetailSheet(
 
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                if (isPayment) {
-                                    "${formatDate(job.startTimeMillis)} • ${job.notes.ifBlank { "Direct Payment Received" }}"
+                                text = if (isPayment) {
+                                    "${formatDate(job.startTimeMillis)} • ${job.notes.ifBlank { if (isTamil) "நேரடி பணம் பெறப்பட்டது" else "Direct Payment Received" }}"
                                 } else {
                                     "${formatDate(job.startTimeMillis)} • ${com.example.ui.util.WorkBillingCalculator.formatDuration(job.durationMinutes)} • ${job.tractorLabel}"
                                 },
                                 fontSize = 11.sp,
                                 color = TextMutedDark
-                            )
+                             )
 
                             if (!isPayment) {
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -1429,8 +1491,8 @@ fun CustomerDetailSheet(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("Paid: ${formatInr(job.amountReceived)}", fontSize = 11.sp, color = SuccessPaidGreen)
-                                    Text("Due: ${formatInr(job.pendingAmount)}", fontSize = 11.sp, color = if (job.pendingAmount > 0) AlertDueRed else SuccessPaidGreen, fontWeight = FontWeight.SemiBold)
+                                    Text("${if (isTamil) "செலுத்தியது" else "Paid"}: ${formatInr(job.amountReceived)}", fontSize = 11.sp, color = SuccessPaidGreen)
+                                    Text("${if (isTamil) "நிலுவை" else "Due"}: ${formatInr(job.pendingAmount)}", fontSize = 11.sp, color = if (job.pendingAmount > 0) AlertDueRed else SuccessPaidGreen, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }
@@ -1453,6 +1515,7 @@ fun RecordCustomerPaymentDialog(
     onConfirm: (amount: Double, dateMillis: Long, method: String, note: String) -> Unit
 ) {
     val context = LocalContext.current
+    val isTamil = settings.language == "TA"
     var amountInput by remember { mutableStateOf(if (customer.balanceDue > 0) String.format(Locale.US, "%.0f", customer.balanceDue) else "") }
     var paymentDateMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var selectedPaymentMethod by remember { mutableStateOf("Cash") }
@@ -1486,7 +1549,7 @@ fun RecordCustomerPaymentDialog(
                     )
                 }
                 Text(
-                    text = "Add Payment",
+                    text = if (isTamil) "கட்டணம் சேர்க்க" else "Add Payment",
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                     color = ForestGreenHeader
@@ -1506,7 +1569,7 @@ fun RecordCustomerPaymentDialog(
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text(
-                            text = "Customer: ${customer.name}",
+                            text = if (isTamil) "வாடிக்கையாளர்: ${customer.name}" else "Customer: ${customer.name}",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             color = ForestGreenHeader
@@ -1516,7 +1579,7 @@ fun RecordCustomerPaymentDialog(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Pending Due:", fontSize = 12.sp, color = TextSecondaryDark)
+                            Text(if (isTamil) "நிலுவைத் தொகை:" else "Pending Due:", fontSize = 12.sp, color = TextSecondaryDark)
                             Text(
                                 formatInr(customer.balanceDue),
                                 fontSize = 13.sp,
@@ -1531,7 +1594,7 @@ fun RecordCustomerPaymentDialog(
                 OutlinedTextField(
                     value = amountInput,
                     onValueChange = { amountInput = it },
-                    label = { Text("Amount Received (₹) *") },
+                    label = { Text(if (isTamil) "பெறப்பட்ட தொகை (₹) *" else "Amount Received (₹) *") },
                     leadingIcon = { Icon(Icons.Default.Paid, contentDescription = null, tint = DeepSageGreen) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -1539,7 +1602,11 @@ fun RecordCustomerPaymentDialog(
                     supportingText = {
                         if (hasAttemptedSubmit && isAmountInvalid) {
                             Text(
-                                text = if (amountInput.isBlank()) "This field is required" else "Please enter an amount greater than 0",
+                                text = if (amountInput.isBlank()) {
+                                    if (isTamil) "இந்தத் துறை கட்டாயமாகும்" else "This field is required"
+                                } else {
+                                    if (isTamil) "பூஜ்ஜியத்தை விட அதிகமான தொகையை உள்ளிடவும்" else "Please enter an amount greater than 0"
+                                },
                                 color = AlertDueRed,
                                 fontSize = 11.sp
                             )
@@ -1583,7 +1650,7 @@ fun RecordCustomerPaymentDialog(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = DeepSageGreen, modifier = Modifier.size(18.dp))
-                            Text("Payment Date:", fontSize = 12.sp, color = TextSecondaryDark)
+                            Text(if (isTamil) "கட்டணம் செலுத்திய தேதி:" else "Payment Date:", fontSize = 12.sp, color = TextSecondaryDark)
                         }
                         Text(
                             formatDate(paymentDateMillis),
@@ -1597,7 +1664,7 @@ fun RecordCustomerPaymentDialog(
                 // 3. Payment Method (Optional)
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "Payment Method (Optional)",
+                        text = if (isTamil) "பணம் செலுத்தும் முறை (விருப்பத்தேர்வு)" else "Payment Method (Optional)",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = TextSecondaryDark
@@ -1610,7 +1677,7 @@ fun RecordCustomerPaymentDialog(
                             FilterChip(
                                 selected = selectedPaymentMethod == method,
                                 onClick = { selectedPaymentMethod = method },
-                                label = { Text(method, fontSize = 11.sp) },
+                                label = { Text(getLocalizedPaymentMethod(method, isTamil), fontSize = 11.sp) },
                                 modifier = Modifier.weight(1f),
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = DeepSageGreen,
@@ -1627,7 +1694,7 @@ fun RecordCustomerPaymentDialog(
                             FilterChip(
                                 selected = selectedPaymentMethod == method,
                                 onClick = { selectedPaymentMethod = method },
-                                label = { Text(method, fontSize = 11.sp) },
+                                label = { Text(getLocalizedPaymentMethod(method, isTamil), fontSize = 11.sp) },
                                 modifier = Modifier.weight(1f),
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = DeepSageGreen,
@@ -1642,8 +1709,8 @@ fun RecordCustomerPaymentDialog(
                 OutlinedTextField(
                     value = noteInput,
                     onValueChange = { noteInput = it },
-                    label = { Text("Note / Remarks (Optional)") },
-                    placeholder = { Text("e.g. Cleared harvest balance") },
+                    label = { Text(if (isTamil) "குறிப்பு / விபரம் (விருப்பத்தேர்வு)" else "Note / Remarks (Optional)") },
+                    placeholder = { Text(if (isTamil) "எ.கா. அறுவடை இருப்பு கணக்கு தீர்க்கப்பட்டது" else "e.g. Cleared harvest balance") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
@@ -1667,12 +1734,12 @@ fun RecordCustomerPaymentDialog(
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.testTag("btn_confirm_record_payment")
             ) {
-                Text("Save Payment", fontWeight = FontWeight.Bold)
+                Text(if (isTamil) "கட்டணத்தைச் சேமி" else "Save Payment", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = TextMutedDark)
+                Text(if (isTamil) "ரத்து" else "Cancel", color = TextMutedDark)
             }
         }
     )

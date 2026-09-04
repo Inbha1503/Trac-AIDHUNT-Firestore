@@ -211,9 +211,9 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.spacedBy(if (responsive.isSmallPhone) 8.dp else 12.dp)
                 ) {
                     MetricCard(
-                        title = "Total Received",
+                        title = if (isTamil) "மொத்த வரவு" else "Total Received",
                         amount = totalReceived,
-                        subtitle = "Collections",
+                        subtitle = if (isTamil) "வசூலிக்கப்பட்டது" else "Collections",
                         icon = Icons.Default.CheckCircle,
                         containerColor = SuccessPaidGreenBg,
                         contentColor = SuccessPaidGreen,
@@ -222,9 +222,9 @@ fun HomeScreen(
                     )
 
                     MetricCard(
-                        title = "Total Due",
+                        title = if (isTamil) "மொத்த பாக்கி" else "Total Due",
                         amount = totalPending,
-                        subtitle = "Pending Dues",
+                        subtitle = if (isTamil) "நிலுவைத் தொகை" else "Pending Dues",
                         icon = Icons.Default.PendingActions,
                         containerColor = AlertDueRedBg,
                         contentColor = AlertDueRed,
@@ -252,7 +252,7 @@ fun HomeScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f, fill = false)) {
                             Text(
-                                text = "Available Business Balance",
+                                text = if (isTamil) "கிடைக்கக்கூடிய வணிக இருப்பு" else "Available Business Balance",
                                 fontSize = if (responsive.isSmallPhone) 12.sp else 13.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = AppTheme.colors.textPrimary,
@@ -260,7 +260,7 @@ fun HomeScreen(
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "Cash in hand",
+                                text = if (isTamil) "கையில் ரொக்கம்" else "Cash in hand",
                                 fontSize = if (responsive.isSmallPhone) 10.5.sp else 11.sp,
                                 color = AppTheme.colors.textMuted,
                                 maxLines = 1,
@@ -290,14 +290,14 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Recent Job Entries",
+                        text = if (isTamil) "சமீபத்திய வேலைப் பதிவுகள்" else "Recent Job Entries",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = AppTheme.colors.textPrimary
                     )
 
                     Text(
-                        text = "${recentJobs.size} Entries",
+                        text = if (isTamil) "${recentJobs.size} பதிவுகள்" else "${recentJobs.size} Entries",
                         fontSize = 12.sp,
                         color = SageAccent,
                         fontWeight = FontWeight.Medium
@@ -328,13 +328,13 @@ fun HomeScreen(
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = "No tractor job entries yet",
+                                text = if (isTamil) "வேலைப் பதிவுகள் எதுவும் இல்லை" else "No tractor job entries yet",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = AppTheme.colors.textPrimary
                             )
                             Text(
-                                text = "Tap '+ New Job' to record your first field work",
+                                text = if (isTamil) "உங்கள் முதல் வேலையை பதிவு செய்ய '+ புதிய வேலை' என்பதைத் தொடவும்" else "Tap '+ New Job' to record your first field work",
                                 fontSize = 12.sp,
                                 color = AppTheme.colors.textSecondary
                             )
@@ -480,6 +480,7 @@ fun JobEntryItemCard(
     onSharePdf: () -> Unit
 ) {
     val responsive = com.example.ui.theme.rememberResponsiveDimensions()
+    val isTamil = settings.language.equals("TA", ignoreCase = true)
     val isPaid = job.pendingAmount <= 0.0
     val avatarColor = getCustomerAvatarColor(job.customerName)
     val initials = getCustomerInitials(job.customerName)
@@ -532,7 +533,7 @@ fun JobEntryItemCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = job.customerName.ifBlank { "Customer" },
+                            text = job.customerName.ifBlank { if (isTamil) "வாடிக்கையாளர்" else "Customer" },
                             fontSize = if (responsive.isSmallPhone) 15.sp else 16.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = AppTheme.colors.textPrimary,
@@ -562,7 +563,7 @@ fun JobEntryItemCard(
                     ) {
                         if (job.workType.isNotBlank()) {
                             Text(
-                                text = job.workType,
+                                text = com.example.ui.util.Localization.getWorkTypeDisplayName(job.workType, isTamil),
                                 fontSize = if (responsive.isSmallPhone) 11.5.sp else 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = DeepSageGreen,
@@ -609,7 +610,7 @@ fun JobEntryItemCard(
                         )
                     }
                     Text(
-                        text = if (isPaid) "Paid" else "Due",
+                        text = if (isPaid) (if (isTamil) "செலுத்தப்பட்டது" else "Paid") else (if (isTamil) "பாக்கி" else "Due"),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (isPaid) Color(0xFF166534) else Color(0xFFDC2626),
@@ -733,6 +734,7 @@ fun CustomerSummaryPopup(
     onShareWhatsApp: () -> Unit
 ) {
     val responsive = com.example.ui.theme.rememberResponsiveDimensions()
+    val isTamil = settings.language.equals("TA", ignoreCase = true)
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -800,7 +802,7 @@ fun CustomerSummaryPopup(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = if (job.customerPhone.isNotBlank()) job.customerPhone else "No phone number",
+                                    text = if (job.customerPhone.isNotBlank()) job.customerPhone else (if (isTamil) "தொலைபேசி எண் இல்லை" else "No phone number"),
                                     fontSize = 13.sp,
                                     color = Color(0xFF6B7280),
                                     maxLines = 1,
@@ -826,7 +828,7 @@ fun CustomerSummaryPopup(
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
                                             imageVector = Icons.Default.Call,
-                                            contentDescription = "Call Customer",
+                                            contentDescription = if (isTamil) "அழைக்கவும்" else "Call Customer",
                                             tint = SuccessPaidGreen,
                                             modifier = Modifier.size(20.dp)
                                         )
@@ -842,7 +844,7 @@ fun CustomerSummaryPopup(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = "Close",
+                                    contentDescription = if (isTamil) "மூடு" else "Close",
                                     tint = Color(0xFF6B7280),
                                     modifier = Modifier.size(22.dp)
                                 )
@@ -889,13 +891,13 @@ fun CustomerSummaryPopup(
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Call Customer",
+                                    text = if (isTamil) "வாடிக்கையாளரை அழைக்கவும்" else "Call Customer",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF111827)
                                 )
                                 Text(
-                                    text = if (job.customerPhone.isNotBlank()) "Tap to call using phone number" else "Phone number unavailable",
+                                    text = if (job.customerPhone.isNotBlank()) (if (isTamil) "அழைக்க தொடவும்" else "Tap to call using phone number") else (if (isTamil) "தொலைபேசி எண் இல்லை" else "Phone number unavailable"),
                                     fontSize = 11.5.sp,
                                     color = Color(0xFF6B7280)
                                 )
@@ -948,7 +950,7 @@ fun CustomerSummaryPopup(
                                     }
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "Total Amount",
+                                            text = if (isTamil) "மொத்த தொகை" else "Total Amount",
                                             fontSize = 11.sp,
                                             color = Color(0xFF6B7280),
                                             fontWeight = FontWeight.Normal
@@ -989,7 +991,7 @@ fun CustomerSummaryPopup(
                                     }
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "Total Time",
+                                            text = if (isTamil) "மொத்த நேரம்" else "Total Time",
                                             fontSize = 11.sp,
                                             color = Color(0xFF6B7280),
                                             fontWeight = FontWeight.Normal
@@ -1041,7 +1043,7 @@ fun CustomerSummaryPopup(
                                     }
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "Paid",
+                                            text = if (isTamil) "செலுத்தியது" else "Paid",
                                             fontSize = 11.sp,
                                             color = Color(0xFF6B7280),
                                             fontWeight = FontWeight.Normal
@@ -1080,7 +1082,7 @@ fun CustomerSummaryPopup(
                                     }
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "Balance Due",
+                                            text = if (isTamil) "நிலுவை பாக்கி" else "Balance Due",
                                             fontSize = 11.sp,
                                             color = Color(0xFF6B7280),
                                             fontWeight = FontWeight.Normal
@@ -1139,7 +1141,7 @@ fun CustomerSummaryPopup(
                                 }
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Tractor",
+                                        text = if (isTamil) "டிராக்டர்" else "Tractor",
                                         fontSize = 11.sp,
                                         color = Color(0xFF6B7280),
                                         fontWeight = FontWeight.Medium
@@ -1179,7 +1181,7 @@ fun CustomerSummaryPopup(
                                 }
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Operator",
+                                        text = if (isTamil) "இயக்குபவர் / பார்ட்னர்" else "Operator",
                                         fontSize = 11.sp,
                                         color = Color(0xFF6B7280),
                                         fontWeight = FontWeight.Medium
@@ -1215,7 +1217,7 @@ fun CustomerSummaryPopup(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Share on WhatsApp",
+                            text = if (isTamil) "வாட்ஸ்அப்பில் பகிரவும்" else "Share on WhatsApp",
                             fontSize = 14.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White

@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.example.ui.components.AppBottomNav
 import com.example.ui.components.AppTopHeader
+import com.example.ui.components.StartupSplashScreen
 import com.example.ui.screens.account.AccountScreen
 import com.example.ui.screens.auth.FirstAccountSetupDialog
 import com.example.ui.screens.auth.LoginScreen
@@ -83,10 +84,10 @@ fun MainAppContent(
     val simulatedOffline by viewModel.simulatedOffline.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
     val pendingInvitations by viewModel.pendingInvitations.collectAsState()
-    val availableWorkspaces by viewModel.availableWorkspaces.collectAsState()
     val activeWorkspaceId by viewModel.activeWorkspaceId.collectAsState()
     val workspaceMembers by viewModel.workspaceMembers.collectAsState()
     val isCollaborationOwner by viewModel.isCollaborationOwner.collectAsState()
+    val isSavingJob by viewModel.isSavingJob.collectAsState()
 
     // Handle Hardware Back Button
     BackHandler(enabled = currentTab == BottomTab.REPORT && currentReportSubPage != ReportSubPage.MENU) {
@@ -204,16 +205,54 @@ fun MainAppContent(
         }
     }
 
-    if (!settings.isLoggedIn) {
+    val isStartupAuthResolved by viewModel.isStartupAuthResolved.collectAsState()
+    val workspaceInitState by viewModel.workspaceInitState.collectAsState()
+    val currentUser = try { com.google.firebase.auth.FirebaseAuth.getInstance().currentUser } catch (_: Exception) { null }
+    val isAuthenticated = currentUser != null || authState is com.example.data.firebase.AuthState.Authenticated
+
+    // STRICT DATA BOUNDARY: When authenticated, never render main screens until workspace is fully Ready
+    val isAuthInitializing = !isStartupAuthResolved || (isAuthenticated && workspaceInitState !is com.example.data.repository.WorkspaceInitState.Ready)
+
+    if (isAuthInitializing) {
+        StartupSplashScreen()
+    } else if (!isAuthenticated) {
         val authError = (authState as? com.example.data.firebase.AuthState.Error)?.message
         LoginScreen(
             partners = partners,
+            isTamil = isTamil,
+            onToggleLanguage = {
+                viewModel.updateSettings(settings.copy(language = if (isTamil) "EN" else "TA"))
+            },
             onLoginSuccess = { _, _ -> },
             onGoogleSignInRequested = {
                 viewModel.signInWithGoogle(
                     context = context,
                     onSuccess = { profile ->
                         onShowToast(if (isTamil) "கூகிள் மூலம் உள்நுழைந்தது: ${profile.displayName ?: profile.email ?: ""}" else "Logged in with Google: ${profile.displayName ?: profile.email ?: ""}")
+                    },
+                    onError = { err ->
+                        onShowToast(err)
+                    }
+                )
+            },
+            onEmailSignInRequested = { email, password ->
+                viewModel.signInWithEmail(
+                    email = email,
+                    password = password,
+                    onSuccess = { profile ->
+                        onShowToast(if (isTamil) "மின்னஞ்சல் மூலம் உள்நுழைந்தது: ${profile.displayName ?: profile.email ?: ""}" else "Logged in: ${profile.displayName ?: profile.email ?: ""}")
+                    },
+                    onError = { err ->
+                        onShowToast(err)
+                    }
+                )
+            },
+            onEmailSignUpRequested = { email, password ->
+                viewModel.signUpWithEmail(
+                    email = email,
+                    password = password,
+                    onSuccess = { profile ->
+                        onShowToast(if (isTamil) "கணக்கு உருவாக்கப்பட்டது: ${profile.displayName ?: profile.email ?: ""}" else "Account created: ${profile.displayName ?: profile.email ?: ""}")
                     },
                     onError = { err ->
                         onShowToast(err)
@@ -306,7 +345,7 @@ fun MainAppContent(
                     },
                     rightActionIcon = rightActionIcon,
                     onRightActionClick = onRightActionClick,
-                    isDarkGreenStyle = (currentTab == BottomTab.ACCOUNT)
+                    isDarkGreenStyle = true
                 )
             },
             bottomBar = {
@@ -399,8 +438,9 @@ fun MainAppContent(
                         }
 
                         BottomTab.NEW_ENTRY -> {
+                            val ownTractors = tractors.filter { it.workspaceId == settings.workspaceId }
                             val draft = newEntryDraft ?: com.example.ui.viewmodel.NewEntryDraft.createDefault(
-                                defaultTractor = if (settings.lockedTractorLabel.isNotBlank()) settings.lockedTractorLabel else (tractors.firstOrNull()?.label ?: ""),
+                                defaultTractor = if (settings.lockedTractorLabel.isNotBlank()) settings.lockedTractorLabel else (ownTractors.firstOrNull()?.label ?: ""),
                                 lockedTractor = settings.lockedTractorLabel,
                                 defaultHourlyRate = settings.defaultHourlyRate
                             )
@@ -409,13 +449,24 @@ fun MainAppContent(
                                 tractors = tractors,
                                 customers = customers,
                                 draft = draft,
+                                isSaving = isSavingJob,
                                 onUpdateDraft = { viewModel.updateNewEntryDraft(it) },
                                 onClearDraft = { viewModel.clearNewEntryDraft() },
                                 onSaveJob = { job, linkedExpense ->
-                                    viewModel.saveJobEntry(job, linkedExpense) {
-                                        onShowToast(if (isTamil) "வேலைப் பதிவு வெற்றிகரமாகச் சேமிக்கப்பட்டது!" else "Job Entry saved successfully!")
-                                        viewModel.setBottomTab(BottomTab.HOME)
-                                    }
+                                    android.util.Log.d("TRAC_ENTRY", "SAVE_START entryId=${job.id} customer=${job.customerName}")
+                                    viewModel.saveJobEntry(
+                                        job = job,
+                                        linkedExpense = linkedExpense,
+                                        onSuccess = {
+                                            android.util.Log.d("TRAC_ENTRY", "SAVE_SUCCESS entryId=${job.id} -> NAVIGATE_HOME")
+                                            onShowToast(if (isTamil) "வேலைப் பதிவு வெற்றிகரமாகச் சேமிக்கப்பட்டது!" else "Job Entry saved successfully!")
+                                            viewModel.setBottomTab(BottomTab.HOME)
+                                        },
+                                        onError = { errMsg ->
+                                            android.util.Log.e("TRAC_ENTRY", "SAVE_ERROR entryId=${job.id} err=$errMsg")
+                                            onShowToast(if (isTamil) "சேமிப்பதில் பிழை: $errMsg" else "Failed to save: $errMsg")
+                                        }
+                                    )
                                 },
                                 onUpdateLockedTractor = { locked ->
                                     viewModel.updateSettings(settings.copy(lockedTractorLabel = locked))
@@ -438,15 +489,9 @@ fun MainAppContent(
                                 unsyncedCustomersCount = unsyncedCustomersCount,
                                 totalUnsyncedCount = totalUnsyncedCount,
                                 pendingInvitations = pendingInvitations,
-                                availableWorkspaces = availableWorkspaces,
                                 workspaceMembers = workspaceMembers,
                                 isCollaborationOwner = isCollaborationOwner,
                                 activeWorkspaceId = activeWorkspaceId,
-                                onSwitchWorkspace = { wsId ->
-                                    viewModel.switchWorkspace(wsId) {
-                                        onShowToast(if (isTamil) "கணக்கு இடம் மாற்றப்பட்டது" else "Switched active workspace")
-                                    }
-                                },
                                 isSimulatedOffline = simulatedOffline,
                                 onToggleSimulatedOffline = { viewModel.toggleSimulatedOffline(it) },
                                 onTriggerSync = {

@@ -30,6 +30,14 @@ class AuthRepository(
         return authService.signInWithGoogle(context, webClientId)
     }
 
+    suspend fun signInWithEmail(email: String, password: String): Result<UserProfile> {
+        return authService.signInWithEmail(email, password)
+    }
+
+    suspend fun signUpWithEmail(email: String, password: String): Result<UserProfile> {
+        return authService.signUpWithEmail(email, password)
+    }
+
     fun sendPhoneOtp(
         activity: Activity,
         phoneNumber: String,

@@ -42,7 +42,7 @@ class ExampleRobolectricTest {
     fun `read string from context`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val appName = context.getString(R.string.app_name)
-        assertEquals("AIDHUNT Trac", appName)
+        assertEquals("Trac", appName)
     }
 
     @Test
@@ -200,6 +200,89 @@ class ExampleRobolectricTest {
 
         assertEquals(1, unsyncedCountA)
         assertEquals(1, unsyncedCountB)
+    }
+
+    @Test
+    fun `customer and tractor isolation - entities are partitioned strictly by workspaceId`() = runBlocking {
+        val customerDao = database.customerDao()
+        val tractorDao = database.tractorDao()
+
+        val custA = CustomerEntity(
+            id = 1L,
+            workspaceId = "ws_owner_100",
+            name = "Farmer Ramesh",
+            phone = "9876543210",
+            location = "North Village",
+            totalBilled = 3000.0,
+            totalPaid = 2000.0,
+            balanceDue = 1000.0,
+            isSynced = true
+        )
+        val custB = custA.copy(id = 2L, workspaceId = "ws_owner_200", name = "Farmer Suresh")
+
+        customerDao.insertCustomer(custA)
+        customerDao.insertCustomer(custB)
+
+        val customersA = customerDao.getCustomersForWorkspace("ws_owner_100").first()
+        val customersB = customerDao.getCustomersForWorkspace("ws_owner_200").first()
+
+        assertEquals(1, customersA.size)
+        assertEquals("Farmer Ramesh", customersA[0].name)
+        assertEquals(1, customersB.size)
+        assertEquals("Farmer Suresh", customersB[0].name)
+    }
+
+    @Test
+    fun `shared canonical workspace - multiple partners write to same owner workspaceId`() = runBlocking {
+        val jobDao = database.jobEntryDao()
+        val canonicalOwnerWsId = "ws_owner_alpha"
+
+        // Owner creates entry
+        val entryByOwner = JobEntryEntity(
+            id = 101L,
+            workspaceId = canonicalOwnerWsId,
+            customerId = 1L,
+            customerName = "Customer 1",
+            customerPhone = "1234567890",
+            customerLocation = "Farm A",
+            operatorName = "Owner Alpha",
+            tractorId = 1L,
+            tractorLabel = "John Deere 5050D",
+            workType = "Ploughing",
+            startTimeMillis = 1000L,
+            endTimeMillis = 2000L,
+            durationMinutes = 60,
+            hourlyRate = 1000.0,
+            totalAmount = 1000.0,
+            amountReceived = 1000.0,
+            pendingAmount = 0.0,
+            addedByPartner = "Owner Alpha",
+            isSynced = true
+        )
+
+        // Partner 1 creates entry in the same canonical owner workspace
+        val entryByPartner1 = entryByOwner.copy(
+            id = 102L,
+            operatorName = "Partner 1",
+            addedByPartner = "Partner 1"
+        )
+
+        // Partner 2 creates entry in the same canonical owner workspace
+        val entryByPartner2 = entryByOwner.copy(
+            id = 103L,
+            operatorName = "Partner 2",
+            addedByPartner = "Partner 2"
+        )
+
+        jobDao.insertJob(entryByOwner)
+        jobDao.insertJob(entryByPartner1)
+        jobDao.insertJob(entryByPartner2)
+
+        val allJobsInWorkspace = jobDao.getJobsForWorkspace(canonicalOwnerWsId).first()
+        assertEquals(3, allJobsInWorkspace.size)
+        assertTrue(allJobsInWorkspace.any { it.addedByPartner == "Owner Alpha" })
+        assertTrue(allJobsInWorkspace.any { it.addedByPartner == "Partner 1" })
+        assertTrue(allJobsInWorkspace.any { it.addedByPartner == "Partner 2" })
     }
 }
 

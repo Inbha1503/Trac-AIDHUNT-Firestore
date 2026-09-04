@@ -2,7 +2,9 @@ package com.example.ui.screens.entry
 
 import android.app.TimePickerDialog
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -11,6 +13,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -109,6 +112,7 @@ fun NewEntryScreen(
     tractors: List<TractorEntity>,
     customers: List<CustomerEntity>,
     draft: NewEntryDraft,
+    isSaving: Boolean = false,
     onUpdateDraft: (NewEntryDraft) -> Unit,
     onClearDraft: () -> Unit,
     onSaveJob: (JobEntryEntity, ExpenseEntity?) -> Unit,
@@ -117,12 +121,39 @@ fun NewEntryScreen(
     val context = LocalContext.current
     val isTamil = settings.language.equals("TA", ignoreCase = true)
 
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        Log.d("TRAC_ENTRY", "NewEntryScreen OPEN wsId=${settings.workspaceId}")
+    }
+
+    var localIsSaving by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(isSaving) {
+        if (!isSaving) {
+            localIsSaving = false
+        }
+    }
+    val effectiveIsSaving = isSaving || localIsSaving
+
+    // Handle Back Press when on Review Screen or Dialogs to prevent accidental screen close
+    BackHandler(enabled = draft.isReviewScreenVisible) {
+        Log.d("TRAC_ENTRY", "BackHandler: exiting review screen back to edit form")
+        if (!effectiveIsSaving) {
+            onUpdateDraft(draft.copy(isReviewScreenVisible = false))
+        }
+    }
+
     // 1. Partner Name: Auto-filled from logged-in account, read-only
     val currentPartnerName = settings.activePartnerName
 
     // 2. Tractor Selection & Lock State
-    val selectedTractor = if (draft.selectedTractor.isNotBlank()) draft.selectedTractor else {
-        if (settings.lockedTractorLabel.isNotBlank()) settings.lockedTractorLabel else (tractors.firstOrNull()?.label ?: "")
+    val ownTractors = remember(tractors, settings.workspaceId) {
+        tractors.filter { it.workspaceId == settings.workspaceId }
+    }
+    val selectedTractor = if (draft.selectedTractor.isNotBlank() && tractors.any { it.label == draft.selectedTractor }) {
+        draft.selectedTractor
+    } else if (settings.lockedTractorLabel.isNotBlank() && tractors.any { it.label == settings.lockedTractorLabel }) {
+        settings.lockedTractorLabel
+    } else {
+        ownTractors.firstOrNull()?.label ?: ""
     }
     val isTractorLocked = draft.isTractorLocked
     val selectedWorkType = draft.selectedWorkType
@@ -183,6 +214,11 @@ fun NewEntryScreen(
     // Validation & Clear State
     val hasAttemptedReview = draft.hasAttemptedReview
     var showClearConfirmationDialog by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = showClearConfirmationDialog) {
+        Log.d("TRAC_ENTRY", "BackHandler: dismissing clear confirmation dialog")
+        showClearConfirmationDialog = false
+    }
 
     val isTractorInvalid = selectedTractor.isBlank() || (tractors.isNotEmpty() && tractors.none { it.label == selectedTractor })
     val isCustomerNameInvalid = customerNameInput.isBlank()
@@ -267,6 +303,7 @@ fun NewEntryScreen(
             notes = notes,
             linkedExpense = if (includeLinkedExpense && (linkedExpenseAmountInput.toDoubleOrNull() ?: 0.0) > 0) {
                 ExpenseEntity(
+                    id = if (draft.linkedExpenseId > 0L) draft.linkedExpenseId else 0L,
                     expenseType = linkedExpenseType,
                     amount = linkedExpenseAmountInput.toDoubleOrNull() ?: 0.0,
                     tractorLabel = selectedTractor,
@@ -275,12 +312,25 @@ fun NewEntryScreen(
                     addedByPartner = currentPartnerName
                 )
             } else null,
+            isSaving = effectiveIsSaving,
             onBackToEdit = {
-                onUpdateDraft(draft.copy(isReviewScreenVisible = false))
+                if (!effectiveIsSaving) {
+                    onUpdateDraft(draft.copy(isReviewScreenVisible = false))
+                }
             },
             onConfirmSave = {
+                if (effectiveIsSaving) return@FullReviewAndSaveScreen
+                localIsSaving = true
+
+                val entryId = if (draft.entryId > 0L) draft.entryId else com.example.data.util.IdGenerator.generateId()
+                val expenseId = if (draft.linkedExpenseId > 0L) draft.linkedExpenseId else com.example.data.util.IdGenerator.generateId()
+                if (draft.entryId <= 0L || draft.linkedExpenseId <= 0L) {
+                    onUpdateDraft(draft.copy(entryId = entryId, linkedExpenseId = expenseId))
+                }
+
                 val matchedTractor = tractors.find { it.label == selectedTractor }
                 val job = JobEntryEntity(
+                    id = entryId,
                     customerId = matchedCustomerId,
                     customerName = customerNameInput.trim(),
                     customerPhone = customerPhoneInput.trim(),
@@ -302,6 +352,7 @@ fun NewEntryScreen(
 
                 val linkedExpense = if (includeLinkedExpense && (linkedExpenseAmountInput.toDoubleOrNull() ?: 0.0) > 0) {
                     ExpenseEntity(
+                        id = expenseId,
                         expenseType = linkedExpenseType,
                         amount = linkedExpenseAmountInput.toDoubleOrNull() ?: 0.0,
                         tractorId = matchedTractor?.id ?: 0L,
@@ -319,6 +370,7 @@ fun NewEntryScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .imePadding()
                 .background(AppTheme.colors.background),
             contentPadding = PaddingValues(
                 horizontal = responsive.screenPaddingHorizontal,
@@ -354,7 +406,7 @@ fun NewEntryScreen(
 
                     OutlinedButton(
                         onClick = handleClearAction,
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = AlertDueRed),
                         border = androidx.compose.foundation.BorderStroke(1.dp, AlertDueRed.copy(alpha = 0.4f)),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
@@ -419,7 +471,7 @@ fun NewEntryScreen(
                         }
 
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(12.dp),
                             color = SoftSageGreen
                         ) {
                             Text(
@@ -460,7 +512,7 @@ fun NewEntryScreen(
 
                             // Tractor Lock Indicator / Button
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 color = if (isTractorLocked) SoftSageGreen else Color.Transparent,
                                 modifier = Modifier.clickable {
                                     val newLocked = !isTractorLocked
@@ -493,6 +545,8 @@ fun NewEntryScreen(
                         // Tractor Dropdown with Lock Icon
                         val tractorDisplayText = if (tractors.isEmpty()) {
                             if (isTamil) "டிராக்டர் எதுவும் சேர்க்கப்படவில்லை" else "No tractor added"
+                        } else if (selectedTractor.isBlank()) {
+                            if (isTamil) "டிராக்டரைத் தேர்ந்தெடுக்கவும்" else "Select tractor"
                         } else {
                             selectedTractor
                         }
@@ -542,7 +596,7 @@ fun NewEntryScreen(
                                     .fillMaxWidth()
                                     .menuAnchor()
                                     .testTag("entry_tractor_dropdown"),
-                                shape = RoundedCornerShape(10.dp)
+                                shape = RoundedCornerShape(12.dp)
                             )
                             if (tractors.isNotEmpty()) {
                                 ExposedDropdownMenu(
@@ -586,7 +640,7 @@ fun NewEntryScreen(
                                     .fillMaxWidth()
                                     .menuAnchor()
                                     .testTag("entry_work_type_dropdown"),
-                                shape = RoundedCornerShape(10.dp)
+                                shape = RoundedCornerShape(12.dp)
                             )
                             ExposedDropdownMenu(
                                 expanded = workTypeDropdownExpanded,
@@ -653,7 +707,7 @@ fun NewEntryScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("entry_customer_name_input"),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
 
                         // Smooth Non-intrusive Suggestion Cards below input
@@ -678,7 +732,7 @@ fun NewEntryScreen(
                                     )
                                     customerSuggestions.take(4).forEach { c ->
                                         Surface(
-                                            shape = RoundedCornerShape(8.dp),
+                                            shape = RoundedCornerShape(12.dp),
                                             color = Color.White,
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -736,7 +790,8 @@ fun NewEntryScreen(
                                     val digitsOnly = input.filter { it.isDigit() }.take(10)
                                     onUpdateDraft(draft.copy(customerPhoneInput = digitsOnly))
                                 },
-                                label = { Text(if (isTamil) "தொலைபேசி எண் (10 இலக்கங்கள்) *" else "Phone Number (10 Digits) *") },
+                                label = { Text(if (isTamil) "மொபைல் எண் *" else "Mobile Number *") },
+                                placeholder = { Text(if (isTamil) "10 இலக்க எண்" else "10-digit mobile number", fontSize = 12.sp) },
                                 leadingIcon = {
                                     Icon(
                                         Icons.Default.Phone,
@@ -749,7 +804,7 @@ fun NewEntryScreen(
                                 supportingText = {
                                     if (hasAttemptedReview && isCustomerPhoneInvalid) {
                                         Text(
-                                            text = if (isTamil) "சரியான 10 இலக்க தொலைபேசி எண் தேவை" else "Enter a valid 10-digit mobile number",
+                                            text = if (isTamil) "சரியான 10 இலக்க மொபைல் எண் தேவை" else "Please enter a valid 10-digit mobile number",
                                             color = AlertDueRed,
                                             fontSize = 10.sp
                                         )
@@ -761,7 +816,7 @@ fun NewEntryScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("entry_customer_phone_input"),
-                                shape = RoundedCornerShape(10.dp)
+                                shape = RoundedCornerShape(12.dp)
                             )
 
                             OutlinedTextField(
@@ -770,8 +825,15 @@ fun NewEntryScreen(
                                 label = { Text(if (isTamil) "ஊர் / தோட்டம்" else "Village / Location") },
                                 leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = SageAccent) },
                                 singleLine = true,
+                                supportingText = {
+                                    if (hasAttemptedReview && isCustomerPhoneInvalid) {
+                                        Text("", fontSize = 10.sp)
+                                    } else if (customerPhoneInput.length == 10) {
+                                        Text("", fontSize = 10.sp)
+                                    }
+                                },
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp)
+                                shape = RoundedCornerShape(12.dp)
                             )
                         }
                     }
@@ -804,7 +866,7 @@ fun NewEntryScreen(
 
                             // Direct Duration vs Clock Time Toggle
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 color = SoftSageGreen.copy(alpha = 0.6f)
                             ) {
                                 Row(modifier = Modifier.padding(2.dp)) {
@@ -864,7 +926,7 @@ fun NewEntryScreen(
                                             isSystem24Hour
                                         ).show()
                                     },
-                                    shape = RoundedCornerShape(10.dp),
+                                    shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier
                                         .weight(1f)
                                         .testTag("entry_start_time_btn")
@@ -896,7 +958,7 @@ fun NewEntryScreen(
                                             isSystem24Hour
                                         ).show()
                                     },
-                                    shape = RoundedCornerShape(10.dp),
+                                    shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier
                                         .weight(1f)
                                         .testTag("entry_end_time_btn")
@@ -934,7 +996,7 @@ fun NewEntryScreen(
                                     modifier = Modifier
                                         .weight(1f)
                                         .testTag("entry_manual_hours_input"),
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(12.dp)
                                 )
 
                                 OutlinedTextField(
@@ -953,14 +1015,14 @@ fun NewEntryScreen(
                                     modifier = Modifier
                                         .weight(1f)
                                         .testTag("entry_manual_minutes_input"),
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(12.dp)
                                 )
                             }
                         }
 
                         // Duration Summary Banner
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             color = SageCardBg,
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -1011,11 +1073,16 @@ fun NewEntryScreen(
                                 label = { Text(if (isTamil) "மணிநேர விகிதம் (${settings.currency}/hr)" else "Rate (${settings.currency}/hr)") },
                                 placeholder = { Text("0") },
                                 singleLine = true,
+                                supportingText = {
+                                    if (hasAttemptedReview && isWorkAmountInvalid) {
+                                        Text("", fontSize = 10.sp)
+                                    }
+                                },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("entry_hourly_rate_input"),
-                                shape = RoundedCornerShape(10.dp)
+                                shape = RoundedCornerShape(12.dp)
                             )
 
                             OutlinedTextField(
@@ -1034,7 +1101,7 @@ fun NewEntryScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("entry_work_amount_input"),
-                                shape = RoundedCornerShape(10.dp)
+                                shape = RoundedCornerShape(12.dp)
                             )
                         }
 
@@ -1049,7 +1116,7 @@ fun NewEntryScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("entry_extra_charges_input"),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
 
                         // Amount Received & Pending Due
@@ -1072,11 +1139,11 @@ fun NewEntryScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .testTag("entry_amount_received_input"),
-                                shape = RoundedCornerShape(10.dp)
+                                shape = RoundedCornerShape(12.dp)
                             )
 
                             Card(
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 colors = CardDefaults.cardColors(
                                     containerColor = if (pendingAmount > 0) AlertDueRed.copy(alpha = 0.1f) else SuccessPaidGreen.copy(alpha = 0.1f)
                                 ),
@@ -1112,7 +1179,7 @@ fun NewEntryScreen(
 
                         // Total Bill Summary
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(12.dp),
                             color = SoftSageGreen.copy(alpha = 0.5f),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -1197,10 +1264,15 @@ fun NewEntryScreen(
                                                 readOnly = true,
                                                 label = { Text(if (isTamil) "செலவு வகை" else "Expense Type") },
                                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expenseTypeDropdownExpanded) },
+                                                supportingText = {
+                                                    if (hasAttemptedReview && isLinkedExpenseInvalid) {
+                                                        Text("", fontSize = 10.sp)
+                                                    }
+                                                },
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .menuAnchor(),
-                                                shape = RoundedCornerShape(10.dp)
+                                                shape = RoundedCornerShape(12.dp)
                                             )
                                             ExposedDropdownMenu(
                                                 expanded = expenseTypeDropdownExpanded,
@@ -1232,7 +1304,7 @@ fun NewEntryScreen(
                                         },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                         modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(10.dp)
+                                        shape = RoundedCornerShape(12.dp)
                                     )
                                 }
 
@@ -1242,7 +1314,7 @@ fun NewEntryScreen(
                                     label = { Text(if (isTamil) "செலவு விவரம் (எ.கா. 20 லிட்டர் டீசல்)" else "Expense Description") },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(12.dp)
                                 )
                             }
                         }
@@ -1269,6 +1341,7 @@ fun NewEntryScreen(
             item {
                 Button(
                     onClick = {
+                        if (effectiveIsSaving) return@Button
                         onUpdateDraft(draft.copy(hasAttemptedReview = true))
                         if (tractors.isEmpty()) {
                             Toast.makeText(
@@ -1287,7 +1360,9 @@ fun NewEntryScreen(
                                 (!includeLinkedExpense || !isLinkedExpenseInvalid)
 
                         if (isFormValid) {
-                            onUpdateDraft(draft.copy(isReviewScreenVisible = true, hasAttemptedReview = true))
+                            val entryId = if (draft.entryId > 0L) draft.entryId else com.example.data.util.IdGenerator.generateId()
+                            val expenseId = if (draft.linkedExpenseId > 0L) draft.linkedExpenseId else com.example.data.util.IdGenerator.generateId()
+                            onUpdateDraft(draft.copy(entryId = entryId, linkedExpenseId = expenseId, isReviewScreenVisible = true, hasAttemptedReview = true))
                         } else {
                             val errorMsg = when {
                                 isTractorInvalid -> if (isTamil) "டிராக்டரைத் தேர்வுசெய்க" else "Please select a tractor"
@@ -1301,6 +1376,7 @@ fun NewEntryScreen(
                             Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
                         }
                     },
+                    enabled = !effectiveIsSaving,
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = DeepSageGreen),
                     modifier = Modifier
@@ -1320,6 +1396,7 @@ fun NewEntryScreen(
             item {
                 OutlinedButton(
                     onClick = handleClearAction,
+                    enabled = !effectiveIsSaving,
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = AlertDueRed),
                     border = androidx.compose.foundation.BorderStroke(1.dp, AlertDueRed.copy(alpha = 0.4f)),
@@ -1413,6 +1490,7 @@ fun FullReviewAndSaveScreen(
     pendingAmount: Double,
     notes: String,
     linkedExpense: ExpenseEntity?,
+    isSaving: Boolean = false,
     onBackToEdit: () -> Unit,
     onConfirmSave: () -> Unit
 ) {
@@ -1436,13 +1514,14 @@ fun FullReviewAndSaveScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 IconButton(
-                    onClick = onBackToEdit,
+                    onClick = { if (!isSaving) onBackToEdit() },
+                    enabled = !isSaving,
                     modifier = Modifier.testTag("btn_review_back")
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = DeepSageGreen
+                        tint = if (isSaving) DeepSageGreen.copy(alpha = 0.4f) else DeepSageGreen
                     )
                 }
 
@@ -1577,6 +1656,7 @@ fun FullReviewAndSaveScreen(
             ) {
                 OutlinedButton(
                     onClick = onBackToEdit,
+                    enabled = !isSaving,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .weight(1f)
@@ -1587,22 +1667,45 @@ fun FullReviewAndSaveScreen(
                 }
 
                 Button(
-                    onClick = onConfirmSave,
+                    onClick = {
+                        if (isSaving) return@Button
+                        onConfirmSave()
+                    },
+                    enabled = !isSaving,
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = DeepSageGreen),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = DeepSageGreen,
+                        disabledContainerColor = DeepSageGreen.copy(alpha = 0.6f),
+                        disabledContentColor = Color.White.copy(alpha = 0.8f)
+                    ),
                     modifier = Modifier
                         .weight(1.5f)
                         .height(if (responsive.isSmallPhone) 46.dp else 50.dp)
                         .testTag("btn_confirm_final_save")
                 ) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (isTamil) "உறுதிசெய்து சேமிக்கவும்" else "Confirm & Save",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = if (responsive.isSmallPhone) 13.sp else 14.sp,
-                        maxLines = 1
-                    )
+                    if (isSaving) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isTamil) "சேமிக்கப்படுகிறது..." else "Saving...",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = if (responsive.isSmallPhone) 13.sp else 14.sp,
+                            maxLines = 1
+                        )
+                    } else {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isTamil) "உறுதிசெய்து சேமிக்கவும்" else "Confirm & Save",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = if (responsive.isSmallPhone) 13.sp else 14.sp,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
         }

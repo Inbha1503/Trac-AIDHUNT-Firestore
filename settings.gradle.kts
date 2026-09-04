@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "AIDHUNT Trac"
+rootProject.name = "Trac"
 
 include(":app")

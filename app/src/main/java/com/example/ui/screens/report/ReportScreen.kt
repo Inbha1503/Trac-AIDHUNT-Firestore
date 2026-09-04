@@ -92,6 +92,7 @@ fun ReportScreen(
         when (currentSubPage) {
             ReportSubPage.MENU -> {
                 ReportMenuDashboard(
+                    settings = settings,
                     expensesCount = expenses.size,
                     totalExpenses = totalExpenses,
                     netBalance = netBalance,
@@ -148,6 +149,7 @@ fun ReportScreen(
 
 @Composable
 fun ReportMenuDashboard(
+    settings: AppSettingsEntity,
     expensesCount: Int,
     totalExpenses: Double,
     netBalance: Double,
@@ -157,6 +159,7 @@ fun ReportMenuDashboard(
     onNavigate: (ReportSubPage) -> Unit
 ) {
     val responsive = com.example.ui.theme.rememberResponsiveDimensions()
+    val isTamil = settings.language.equals("TA", ignoreCase = true)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -169,14 +172,14 @@ fun ReportMenuDashboard(
         // 1. Expenses Card
         item {
             ReportMenuCard(
-                title = "Expenses",
-                subtitle = "Diesel, repairs & costs",
+                title = if (isTamil) "செலவுகள்" else "Expenses",
+                subtitle = if (isTamil) "டீசல், பராமரிப்பு மற்றும் பிற செலவுகள்" else "Diesel, repairs & costs",
                 icon = Icons.Default.LocalGasStation,
                 iconBgColor = SoftSageGreen,
                 iconTint = DeepSageGreen,
-                statLabel = "Total Expenses",
-                statValue = formatInr(totalExpenses),
-                badgeText = "$expensesCount entries",
+                statLabel = if (isTamil) "மொத்த செலவுகள்" else "Total Expenses",
+                statValue = formatInr(totalExpenses, settings.currency),
+                badgeText = if (isTamil) "$expensesCount பதிவுகள்" else "$expensesCount entries",
                 badgeBgColor = SoftSageGreen,
                 testTag = "report_menu_card_expenses",
                 onClick = { onNavigate(ReportSubPage.EXPENSES) }
@@ -186,14 +189,14 @@ fun ReportMenuDashboard(
         // 2. Balance Sheet Card
         item {
             ReportMenuCard(
-                title = "Balance Sheet",
-                subtitle = "Profit & loss statement",
+                title = if (isTamil) "வரவு செலவு அறிக்கை" else "Balance Sheet",
+                subtitle = if (isTamil) "லாப நஷ்ட கணக்கு அறிக்கை" else "Profit & loss statement",
                 icon = Icons.Default.Assessment,
                 iconBgColor = SuccessPaidGreenBg,
                 iconTint = SuccessPaidGreen,
-                statLabel = "Net Profit",
-                statValue = formatInr(netBalance),
-                badgeText = if (netBalance >= 0) "Profitable" else "Loss",
+                statLabel = if (isTamil) "நிகர லாபம்" else "Net Profit",
+                statValue = formatInr(netBalance, settings.currency),
+                badgeText = if (netBalance >= 0) (if (isTamil) "லாபம்" else "Profitable") else (if (isTamil) "நஷ்டம்" else "Loss"),
                 badgeBgColor = if (netBalance >= 0) SuccessPaidGreenBg else AlertDueRedBg,
                 testTag = "report_menu_card_balance_sheet",
                 onClick = { onNavigate(ReportSubPage.BALANCE_SHEET) }
@@ -203,14 +206,14 @@ fun ReportMenuDashboard(
         // 3. Withdrawal Card
         item {
             ReportMenuCard(
-                title = "Withdrawal",
-                subtitle = "Partner share distribution",
+                title = if (isTamil) "பங்குதாரர் எடுப்பு" else "Withdrawal",
+                subtitle = if (isTamil) "பங்குதாரர்கள் லாபப் பங்கீடு" else "Partner share distribution",
                 icon = Icons.Default.AccountBalanceWallet,
                 iconBgColor = EarthGoldSoft,
                 iconTint = EarthGold,
-                statLabel = "Total Withdrawn",
-                statValue = formatInr(totalWithdrawn),
-                badgeText = "Partner Split",
+                statLabel = if (isTamil) "மொத்த எடுப்பு" else "Total Withdrawn",
+                statValue = formatInr(totalWithdrawn, settings.currency),
+                badgeText = if (isTamil) "பங்குப் பிரிவு" else "Partner Split",
                 badgeBgColor = EarthGoldSoft,
                 testTag = "report_menu_card_withdrawal",
                 onClick = { onNavigate(ReportSubPage.WITHDRAWAL) }
@@ -220,14 +223,14 @@ fun ReportMenuDashboard(
         // 4. Customer Credit Due Card
         item {
             ReportMenuCard(
-                title = "Customer Dues",
-                subtitle = "Outstanding balances",
+                title = if (isTamil) "வாடிக்கையாளர் கடன் பாக்கி" else "Customer Dues",
+                subtitle = if (isTamil) "நிலுவையில் உள்ள தொகை விவரம்" else "Outstanding balances",
                 icon = Icons.Default.PendingActions,
                 iconBgColor = AlertDueRedBg,
                 iconTint = AlertDueRed,
-                statLabel = "Total Outstanding",
-                statValue = formatInr(totalPendingDue),
-                badgeText = "$pendingCustomersCount dues",
+                statLabel = if (isTamil) "மொத்த பாக்கித் தொகை" else "Total Outstanding",
+                statValue = formatInr(totalPendingDue, settings.currency),
+                badgeText = if (isTamil) "$pendingCustomersCount பாக்கிகள்" else "$pendingCustomersCount dues",
                 badgeBgColor = AlertDueRedBg,
                 testTag = "report_menu_card_customer_dues",
                 onClick = { onNavigate(ReportSubPage.CUSTOMER_CREDIT_DUE) }

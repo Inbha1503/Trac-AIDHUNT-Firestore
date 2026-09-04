@@ -443,6 +443,9 @@ interface AppSettingsDao {
     @Query("SELECT * FROM app_settings LIMIT 1")
     suspend fun getSettingsOnce(): AppSettingsEntity?
 
+    @Query("SELECT * FROM app_settings")
+    suspend fun getAllSettingsOnce(): List<AppSettingsEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateSettings(settings: AppSettingsEntity)
 

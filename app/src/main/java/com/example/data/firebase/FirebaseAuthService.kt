@@ -67,10 +67,43 @@ class FirebaseAuthService(
         }
     }
 
-    private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
+    private val _authState = MutableStateFlow<AuthState>(
+        try {
+            val user = auth?.currentUser
+            if (user != null) {
+                val basicProfile = UserProfile(
+                    uid = user.uid,
+                    displayName = user.displayName,
+                    email = user.email,
+                    phoneNumber = user.phoneNumber,
+                    photoUrl = user.photoUrl?.toString()
+                )
+                AuthState.Authenticated(basicProfile)
+            } else {
+                AuthState.Idle
+            }
+        } catch (e: Exception) {
+            AuthState.Idle
+        }
+    )
     override val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
-    private val _currentUserProfile = MutableStateFlow<UserProfile?>(null)
+    private val _currentUserProfile = MutableStateFlow<UserProfile?>(
+        try {
+            val user = auth?.currentUser
+            if (user != null) {
+                UserProfile(
+                    uid = user.uid,
+                    displayName = user.displayName,
+                    email = user.email,
+                    phoneNumber = user.phoneNumber,
+                    photoUrl = user.photoUrl?.toString()
+                )
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+    )
     override val currentUserProfile: StateFlow<UserProfile?> = _currentUserProfile.asStateFlow()
 
     override val currentUid: String?
@@ -158,6 +191,44 @@ class FirebaseAuthService(
         } catch (e: Exception) {
             Log.e(TAG, "Google Sign-In failed: ${e.message}", e)
             _authState.value = AuthState.Error(e.message ?: "Google Sign-In failed")
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun signInWithEmail(email: String, password: String): Result<UserProfile> {
+        return try {
+            val currentAuth = auth ?: return Result.failure(IllegalStateException("Firebase is not initialized."))
+            _authState.value = AuthState.Loading
+            val authResult = currentAuth.signInWithEmailAndPassword(email.trim(), password).awaitTask()
+            val user = authResult.user ?: throw IllegalStateException("Firebase user is null after email sign in")
+
+            val profile = fetchOrCreateUserProfile(user)
+            Log.d("TRAC_AUTH", "authenticated uid=${user.uid}")
+            _currentUserProfile.value = profile
+            _authState.value = AuthState.Authenticated(profile)
+            Result.success(profile)
+        } catch (e: Exception) {
+            Log.e(TAG, "Email Sign-In failed: ${e.message}", e)
+            _authState.value = AuthState.Error(e.message ?: "Email Sign-In failed")
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun signUpWithEmail(email: String, password: String): Result<UserProfile> {
+        return try {
+            val currentAuth = auth ?: return Result.failure(IllegalStateException("Firebase is not initialized."))
+            _authState.value = AuthState.Loading
+            val authResult = currentAuth.createUserWithEmailAndPassword(email.trim(), password).awaitTask()
+            val user = authResult.user ?: throw IllegalStateException("Firebase user is null after email sign up")
+
+            val profile = fetchOrCreateUserProfile(user)
+            Log.d("TRAC_AUTH", "authenticated uid=${user.uid}")
+            _currentUserProfile.value = profile
+            _authState.value = AuthState.Authenticated(profile)
+            Result.success(profile)
+        } catch (e: Exception) {
+            Log.e(TAG, "Email Sign-Up failed: ${e.message}", e)
+            _authState.value = AuthState.Error(e.message ?: "Email Sign-Up failed")
             Result.failure(e)
         }
     }

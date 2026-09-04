@@ -21,6 +21,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -147,6 +151,20 @@ import com.example.ui.theme.TextPrimaryDark
 import com.example.ui.theme.TextSecondaryDark
 import com.example.ui.viewmodel.AccountSubPage
 
+data class PartnerUiModel(
+    val id: Long,
+    val name: String,
+    val phone: String,
+    val role: String,
+    val photoUri: String,
+    val isConnected: Boolean,
+    val originalPartnerEntity: PartnerEntity?
+)
+
+private fun parseLongId(idStr: String): Long {
+    return idStr.toLongOrNull() ?: (idStr.hashCode().toLong().let { if (it <= 0) Math.abs(it) + 1L else it })
+}
+
 @Composable
 fun AccountScreen(
     currentSubPage: AccountSubPage,
@@ -162,11 +180,9 @@ fun AccountScreen(
     unsyncedCustomersCount: Int = 0,
     totalUnsyncedCount: Int = 0,
     pendingInvitations: List<WorkspaceInvitation> = emptyList(),
-    availableWorkspaces: List<Workspace> = emptyList(),
     workspaceMembers: List<com.example.data.firebase.WorkspaceMember> = emptyList(),
     isCollaborationOwner: Boolean = true,
     activeWorkspaceId: String? = null,
-    onSwitchWorkspace: (String) -> Unit = {},
     onAcceptInvitation: (WorkspaceInvitation) -> Unit = {},
     onDeclineInvitation: (WorkspaceInvitation) -> Unit = {},
     isSimulatedOffline: Boolean = false,
@@ -196,9 +212,8 @@ fun AccountScreen(
                     isOnline = isOnline,
                     totalUnsyncedCount = totalUnsyncedCount,
                     pendingInvitations = pendingInvitations,
-                    availableWorkspaces = availableWorkspaces,
+                    isCollaborationOwner = isCollaborationOwner,
                     activeWorkspaceId = activeWorkspaceId,
-                    onSwitchWorkspace = onSwitchWorkspace,
                     onAcceptInvitation = onAcceptInvitation,
                     onDeclineInvitation = onDeclineInvitation,
                     isSimulatedOffline = isSimulatedOffline,
@@ -242,7 +257,7 @@ fun AccountScreen(
                     }
                 )
             }
-            AccountSubPage.SETTINGS -> {
+        AccountSubPage.SETTINGS -> {
                 BusinessSettingsPage(
                     settings = settings,
                     onUpdateSettings = onUpdateSettings
@@ -257,6 +272,8 @@ fun AccountScreen(
                     isOnline = isOnline,
                     totalUnsyncedCount = totalUnsyncedCount,
                     pendingInvitations = pendingInvitations,
+                    isCollaborationOwner = isCollaborationOwner,
+                    activeWorkspaceId = activeWorkspaceId,
                     onAcceptInvitation = onAcceptInvitation,
                     onDeclineInvitation = onDeclineInvitation,
                     isSimulatedOffline = isSimulatedOffline,
@@ -295,9 +312,8 @@ fun AccountMainDashboard(
     isOnline: Boolean = true,
     totalUnsyncedCount: Int = 0,
     pendingInvitations: List<WorkspaceInvitation> = emptyList(),
-    availableWorkspaces: List<Workspace> = emptyList(),
+    isCollaborationOwner: Boolean = true,
     activeWorkspaceId: String? = null,
-    onSwitchWorkspace: (String) -> Unit = {},
     onAcceptInvitation: (WorkspaceInvitation) -> Unit = {},
     onDeclineInvitation: (WorkspaceInvitation) -> Unit = {},
     isSimulatedOffline: Boolean = false,
@@ -470,18 +486,6 @@ fun AccountMainDashboard(
                             )
                         )
                 ) {
-                    // Right Background Tractor Hero Art
-                    Image(
-                        painter = painterResource(id = R.drawable.account_tractor_hero),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        alpha = 0.85f,
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .size(width = 180.dp, height = 150.dp)
-                            .clip(RoundedCornerShape(topEnd = 18.dp, bottomEnd = 18.dp))
-                    )
-
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -586,16 +590,14 @@ fun AccountMainDashboard(
 
                                 if (settings.businessAddress.isNotBlank()) {
                                     Row(
-                                        verticalAlignment = Alignment.Top,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.LocationOn,
                                             contentDescription = null,
                                             tint = Color(0xFF166534),
-                                            modifier = Modifier
-                                                .padding(top = 2.dp)
-                                                .size(13.dp)
+                                            modifier = Modifier.size(14.dp)
                                         )
                                         Text(
                                             text = settings.businessAddress,
@@ -638,8 +640,13 @@ fun AccountMainDashboard(
                                     }
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
+                                val displayRole = if (isCollaborationOwner) {
+                                    if (isTamil) "வணிக உரிமையாளர்" else "Business Owner"
+                                } else {
+                                    if (isTamil) "பங்குதாரர்" else "Partner"
+                                }
                                 Text(
-                                    text = if (isTamil) "பங்கு: ${activePartner?.role?.ifBlank { "வணிக உரிமையாளர்" } ?: "வணிக உரிமையாளர்"}" else "Role: ${activePartner?.role?.ifBlank { "Business Owner" } ?: "Business Owner"}",
+                                    text = if (isTamil) "பங்கு: $displayRole" else "Role: $displayRole",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -681,7 +688,11 @@ fun AccountMainDashboard(
 
                     AccountSectionItem(
                         icon = Icons.Default.People,
-                        title = if (isTamil) "பங்குதாரர்களை நிர்வகி" else "Manage Partners",
+                        title = if (isCollaborationOwner) {
+                            if (isTamil) "பங்குதாரர்களை நிர்வகி" else "Manage Partners"
+                        } else {
+                            if (isTamil) "வணிக பங்குதாரர்கள்" else "Business Partners"
+                        },
                         badgeText = "${partners.size} Partners",
                         testTag = "btn_nav_manage_partners",
                         onClick = { onNavigate(AccountSubPage.MANAGE_PARTNERS) }
@@ -1365,7 +1376,9 @@ fun EditProfileInfoDialog(
         },
         text = {
             LazyColumn(
-                modifier = Modifier.height(340.dp),
+                modifier = Modifier
+                    .heightIn(max = 340.dp)
+                    .imePadding(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 item {
@@ -2283,6 +2296,7 @@ fun TractorFormPage(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .imePadding()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -2450,46 +2464,200 @@ fun ManagePartnersPage(
     var partnerToEdit by remember { mutableStateOf<PartnerEntity?>(null) }
     var partnerToDelete by remember { mutableStateOf<PartnerEntity?>(null) }
 
-    val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-    val myPhoneClean = settings.activePartnerPhone.filter { it.isDigit() }.takeLast(10)
-    val myName = settings.activePartnerName.trim()
+    val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid?.trim()
+    val ownerNameClean = settings.ownerName.trim()
+    val ownerPhoneClean = settings.businessPhone.filter { it.isDigit() }.takeLast(10)
 
-    // Filter out the logged-in user so they NEVER see themselves as their own partner
+    // Filter out local owner entities so owner never appears as a regular partner
     val filteredLocalPartners = partners.filter { partner ->
         val pPhoneClean = partner.phone.filter { it.isDigit() }.takeLast(10)
-        val isSelfPhone = myPhoneClean.isNotBlank() && pPhoneClean == myPhoneClean
-        val isSelfName = myName.isNotBlank() && partner.name.trim().equals(myName, ignoreCase = true)
-        !isSelfPhone && !isSelfName
+        val isOwnerRole = partner.role.equals("owner", ignoreCase = true)
+        val isOwnerPhone = ownerPhoneClean.isNotBlank() && pPhoneClean == ownerPhoneClean
+        !isOwnerRole && !isOwnerPhone
     }
 
-    // Also include connected members from workspaceMembers that are not in local partners list
-    val extraConnectedPartners = workspaceMembers.filter { member ->
-        val memberPhoneClean = member.phoneNumber?.filter { it.isDigit() }?.takeLast(10) ?: ""
-        val isSelf = (currentUid != null && member.uid == currentUid) ||
-                (myPhoneClean.isNotBlank() && memberPhoneClean == myPhoneClean)
-        val alreadyInLocal = filteredLocalPartners.any { p ->
-            val pClean = p.phone.filter { it.isDigit() }.takeLast(10)
-            pClean.isNotBlank() && pClean == memberPhoneClean
+    // Reconcile into unified UI models with strict Owner vs Partner display filtering
+    val reconciledPartners = remember(filteredLocalPartners, workspaceMembers, currentUid, ownerPhoneClean, isCollaborationOwner, isTamil, settings.workspaceId, settings.ownerName, settings.businessPhone) {
+        val list = mutableListOf<PartnerUiModel>()
+        val matchedMemberKeys = mutableSetOf<String>()
+
+        val ownerMember = workspaceMembers.find { it.role.equals("owner", ignoreCase = true) }
+        val resolvedOwnerUid = ownerMember?.uid?.trim()?.ifBlank { null }
+            ?: settings.workspaceId.removePrefix("ws_").trim()
+        val resolvedOwnerName = ownerMember?.displayName?.trim()?.ifBlank { null }
+            ?: settings.ownerName.trim().ifBlank { null }
+            ?: (if (isTamil) "உரிமையாளர்" else "Owner")
+        val resolvedOwnerPhone = ownerMember?.phoneNumber?.trim()?.ifBlank { null }
+            ?: settings.businessPhone.trim()
+
+        fun isOwner(uid: String?, role: String?): Boolean {
+            if (role?.equals("owner", ignoreCase = true) == true) return true
+            if (!uid.isNullOrBlank() && resolvedOwnerUid.isNotBlank() && uid == resolvedOwnerUid) return true
+            return false
         }
-        !isSelf && !alreadyInLocal
-    }.map { member ->
-        PartnerEntity(
-            id = member.uid.hashCode().toLong(),
-            workspaceId = settings.workspaceId,
-            name = member.displayName?.ifBlank { null } ?: (if (isTamil) "இணைக்கப்பட்ட பங்குதாரர்" else "Connected Partner"),
-            phone = member.phoneNumber ?: "",
-            role = if (isTamil) "பங்குதாரர்" else "Partner"
-        )
-    }
 
-    val allDisplayedPartners = filteredLocalPartners + extraConnectedPartners
+        fun isCurrentUser(uid: String?): Boolean {
+            return !currentUid.isNullOrBlank() && !uid.isNullOrBlank() && uid == currentUid
+        }
+
+        // 1. If viewing as a Partner, inject the Owner row as a read-only person at the top
+        if (!isCollaborationOwner) {
+            val ownerModel = PartnerUiModel(
+                id = parseLongId("owner_$resolvedOwnerUid"),
+                name = resolvedOwnerName,
+                phone = resolvedOwnerPhone,
+                role = if (isTamil) "உரிமையாளர்" else "Owner",
+                photoUri = "",
+                isConnected = true,
+                originalPartnerEntity = null
+            )
+            list.add(ownerModel)
+            if (resolvedOwnerUid.isNotBlank()) {
+                matchedMemberKeys.add(resolvedOwnerUid)
+            }
+        }
+
+        // 2. Process local partners and match with remote members
+        for (partner in filteredLocalPartners) {
+            val pPhoneClean = partner.phone.filter { it.isDigit() }.takeLast(10)
+            val matchedMember = workspaceMembers.find { member ->
+                val isUidMatch = member.uid.isNotBlank() && (partner.id == parseLongId(member.uid) || partner.id == member.uid.hashCode().toLong())
+                val mPhoneClean = member.phoneNumber?.filter { it.isDigit() }?.takeLast(10) ?: ""
+                val isPhoneMatch = mPhoneClean.isNotBlank() && mPhoneClean == pPhoneClean
+                isUidMatch || isPhoneMatch
+            }
+
+            // Exclude Owner from partner entries
+            if (isOwner(matchedMember?.uid, matchedMember?.role ?: partner.role)) {
+                continue
+            }
+
+            // Exclude current logged in user (the partner themself or owner themself)
+            val isSelfByUid = isCurrentUser(matchedMember?.uid) ||
+                (!currentUid.isNullOrBlank() && (partner.id == parseLongId(currentUid) || partner.id == currentUid.hashCode().toLong()))
+            if (isSelfByUid) {
+                continue
+            }
+
+            val isConnected = matchedMember != null && matchedMember.status.equals("active", ignoreCase = true) && matchedMember.uid.isNotBlank()
+
+            if (matchedMember != null) {
+                if (matchedMember.uid.isNotBlank()) {
+                    matchedMemberKeys.add(matchedMember.uid)
+                }
+                val mPhoneClean = matchedMember.phoneNumber?.filter { it.isDigit() }?.takeLast(10) ?: ""
+                if (mPhoneClean.isNotBlank()) {
+                    matchedMemberKeys.add("phone_$mPhoneClean")
+                }
+            }
+            if (pPhoneClean.isNotBlank()) {
+                matchedMemberKeys.add("phone_$pPhoneClean")
+            }
+
+            list.add(
+                PartnerUiModel(
+                    id = partner.id,
+                    name = partner.name.ifBlank { matchedMember?.displayName ?: partner.phone },
+                    phone = partner.phone.ifBlank { matchedMember?.phoneNumber ?: "" },
+                    role = partner.role.ifBlank { if (isTamil) "பங்குதாரர்" else "Partner" },
+                    photoUri = partner.photoUri,
+                    isConnected = isConnected,
+                    originalPartnerEntity = partner
+                )
+            )
+        }
+
+        // 3. Add remote members who aren't in the local list
+        for (member in workspaceMembers) {
+            // Exclude Owner
+            if (isOwner(member.uid, member.role)) {
+                continue
+            }
+
+            // Exclude current logged in user (the partner themself or owner themself)
+            if (isCurrentUser(member.uid)) {
+                continue
+            }
+
+            val memberPhoneClean = member.phoneNumber?.filter { it.isDigit() }?.takeLast(10) ?: ""
+            val memberPhoneKey = if (memberPhoneClean.isNotBlank()) "phone_$memberPhoneClean" else ""
+            if ((member.uid.isNotBlank() && matchedMemberKeys.contains(member.uid)) ||
+                (memberPhoneKey.isNotBlank() && matchedMemberKeys.contains(memberPhoneKey))) {
+                continue
+            }
+
+            // Prevent duplicate by phone if any
+            val duplicateByPhone = list.any { p ->
+                val pPhoneClean = p.phone.filter { it.isDigit() }.takeLast(10)
+                pPhoneClean.isNotBlank() && pPhoneClean == memberPhoneClean
+            }
+            if (duplicateByPhone) {
+                continue
+            }
+
+            val isConnectedMember = member.status.equals("active", ignoreCase = true) && member.uid.isNotBlank()
+            list.add(
+                PartnerUiModel(
+                    id = if (member.uid.isNotBlank()) parseLongId(member.uid) else parseLongId(member.phoneNumber ?: "0"),
+                    name = member.displayName?.ifBlank { null } ?: member.phoneNumber ?: (if (isTamil) "பங்குதாரர்" else "Partner"),
+                    phone = member.phoneNumber ?: "",
+                    role = member.role.ifBlank { if (isTamil) "பங்குதாரர்" else "Partner" },
+                    photoUri = "",
+                    isConnected = isConnectedMember,
+                    originalPartnerEntity = null
+                )
+            )
+        }
+
+        list
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        if (isCollaborationOwner) {
+        if (!isCollaborationOwner) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F8F5)),
+                    border = BorderStroke(1.dp, DeepSageGreen.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.People,
+                            contentDescription = null,
+                            tint = DeepSageGreen,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isTamil) "வணிக பங்குதாரர்கள் (பார்வை மட்டும்)" else "Business Partners (Read-Only)",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ForestGreenHeader
+                            )
+                            Text(
+                                text = if (isTamil)
+                                    "பங்குதாரர்களை வணிக உரிமையாளர் மட்டுமே சேர்க்க/நீக்க முடியும்."
+                                else
+                                    "Partner memberships are managed by the business owner (${settings.ownerName.ifBlank { "Owner" }}).",
+                                fontSize = 11.sp,
+                                color = TextSecondaryDark
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
             item {
                 Button(
                     onClick = { showAddDialog = true },
@@ -2506,7 +2674,7 @@ fun ManagePartnersPage(
             }
         }
 
-        if (allDisplayedPartners.isEmpty()) {
+        if (reconciledPartners.isEmpty()) {
             item {
                 Card(
                     shape = RoundedCornerShape(14.dp),
@@ -2547,18 +2715,15 @@ fun ManagePartnersPage(
             }
         }
 
-        items(allDisplayedPartners, key = { "${it.id}_${it.phone}" }) { partner ->
-            val cleanPhone = partner.phone.filter { ch -> ch.isDigit() }.takeLast(10)
-            val matchedMember = workspaceMembers.find { member ->
-                val mClean = member.phoneNumber?.filter { ch -> ch.isDigit() }?.takeLast(10) ?: ""
-                mClean.isNotBlank() && mClean == cleanPhone
+        items(reconciledPartners, key = { "${it.id}_${it.phone}_${it.role}" }) { partner ->
+            val isOwnerRole = partner.role.equals("owner", ignoreCase = true) ||
+                partner.role.equals("Business Owner", ignoreCase = true) ||
+                partner.role.equals("உரிமையாளர்", ignoreCase = true)
+            val roleLabel = if (isOwnerRole) {
+                if (isTamil) "உரிமையாளர்" else "Owner"
+            } else {
+                if (isTamil) "பங்குதாரர்" else "Partner"
             }
-            val isConnected = matchedMember != null
-
-            // Clean resolved name
-            val resolvedDisplayName = matchedMember?.displayName?.ifBlank { null }
-                ?: partner.name.ifBlank { partner.phone }
-            val roleLabel = if (isTamil) "பங்குதாரர்" else "Partner"
 
             Card(
                 shape = RoundedCornerShape(14.dp),
@@ -2575,14 +2740,14 @@ fun ManagePartnersPage(
                 ) {
                     PartnerAvatarImage(
                         photoUri = partner.photoUri,
-                        name = resolvedDisplayName,
+                        name = partner.name,
                         size = 44.dp,
                         avatarColorHex = "#1E4D2B"
                     )
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = resolvedDisplayName,
+                            text = partner.name,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = ForestGreenHeader
@@ -2592,7 +2757,7 @@ fun ManagePartnersPage(
                             fontSize = 12.sp,
                             color = TextSecondaryDark
                         )
-                        if (isConnected) {
+                        if (partner.isConnected) {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
                                 color = Color(0xFFE8F5E9),
@@ -2615,7 +2780,7 @@ fun ManagePartnersPage(
                                 modifier = Modifier.padding(top = 2.dp)
                             ) {
                                 Text(
-                                    text = if (isTamil) "கணக்கு பதிவு செய்யப்படவில்லை" else "ACCOUNT NOT REGISTERED",
+                                    text = if (isTamil) "கணக்கு பதிவு செய்யப்படவில்லை" else "ACCOUNT NOT CREATED",
                                     fontSize = 10.sp,
                                     color = Color(0xFFE65100),
                                     fontWeight = FontWeight.Bold,
@@ -2626,11 +2791,19 @@ fun ManagePartnersPage(
                     }
 
                     if (isCollaborationOwner) {
+                        val entityToUse = partner.originalPartnerEntity ?: PartnerEntity(
+                            id = partner.id,
+                            workspaceId = settings.workspaceId,
+                            name = partner.name,
+                            phone = partner.phone,
+                            role = partner.role,
+                            photoUri = partner.photoUri
+                        )
                         Row {
-                            IconButton(onClick = { partnerToEdit = partner }) {
+                            IconButton(onClick = { partnerToEdit = entityToUse }) {
                                 Icon(Icons.Default.Edit, contentDescription = "Edit", tint = DeepSageGreen, modifier = Modifier.size(20.dp))
                             }
-                            IconButton(onClick = { partnerToDelete = partner }) {
+                            IconButton(onClick = { partnerToDelete = entityToUse }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Delete", tint = AlertDueRed, modifier = Modifier.size(20.dp))
                             }
                         }
@@ -2719,7 +2892,10 @@ fun PartnerFormDialog(
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .imePadding(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedTextField(
@@ -2846,7 +3022,9 @@ fun BusinessSettingsPage(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {

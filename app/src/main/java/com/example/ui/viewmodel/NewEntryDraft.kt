@@ -17,6 +17,8 @@ val FIXED_WORK_TYPES = listOf(
  * until explicitly cleared by the user or after a successful save.
  */
 data class NewEntryDraft(
+    val entryId: Long = 0L,
+    val linkedExpenseId: Long = 0L,
     val isReviewScreenVisible: Boolean = false,
     val selectedTractor: String = "",
     val isTractorLocked: Boolean = false,
@@ -75,6 +77,8 @@ data class NewEntryDraft(
             val tractor = if (lockedTractor.isNotBlank()) lockedTractor else defaultTractor
             val rateStr = if (defaultHourlyRate > 0.0) defaultHourlyRate.toInt().toString() else ""
             return NewEntryDraft(
+                entryId = com.example.data.util.IdGenerator.generateId(),
+                linkedExpenseId = com.example.data.util.IdGenerator.generateId(),
                 selectedTractor = tractor,
                 isTractorLocked = lockedTractor.isNotBlank(),
                 startHour = now.get(Calendar.HOUR_OF_DAY),

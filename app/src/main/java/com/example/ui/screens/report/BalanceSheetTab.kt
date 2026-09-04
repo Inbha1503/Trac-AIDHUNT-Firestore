@@ -77,6 +77,15 @@ enum class BalanceSheetViewMode(val label: String) {
     YEARLY("Yearly")
 }
 
+fun getLocalizedViewMode(mode: BalanceSheetViewMode, isTamil: Boolean): String {
+    if (!isTamil) return mode.label
+    return when (mode) {
+        BalanceSheetViewMode.DAILY -> "தினசரி"
+        BalanceSheetViewMode.MONTHLY -> "மாதாந்திர"
+        BalanceSheetViewMode.YEARLY -> "வருடாந்திர"
+    }
+}
+
 @Composable
 fun BalanceSheetTab(
     settings: AppSettingsEntity,
@@ -86,6 +95,7 @@ fun BalanceSheetTab(
     totalExpenses: Double,
     netBalance: Double
 ) {
+    val isTamil = settings.language == "TA"
     val context = LocalContext.current
     val responsive = com.example.ui.theme.rememberResponsiveDimensions()
     var viewMode by remember { mutableStateOf(BalanceSheetViewMode.DAILY) }
@@ -96,7 +106,7 @@ fun BalanceSheetTab(
     val monthFormat = SimpleDateFormat("yyyy-MM", Locale.getDefault())
     val monthDisplayFormat = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
     val yearFormat = SimpleDateFormat("yyyy", Locale.getDefault())
-    val yearDisplayFormat = SimpleDateFormat("'Year 'yyyy", Locale.getDefault())
+    val yearDisplayFormat = SimpleDateFormat(if (isTamil) "'ஆண்டு 'yyyy" else "'Year 'yyyy", Locale.getDefault())
 
     val groupedPeriods = remember(jobs, expenses, viewMode) {
         val periods = mutableMapOf<String, MutableList<Any>>()
@@ -183,7 +193,7 @@ fun BalanceSheetTab(
                                 modifier = Modifier.clickable { viewMode = mode }
                             ) {
                                 Text(
-                                    text = mode.label,
+                                    text = getLocalizedViewMode(mode, isTamil),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isSelected) Color.White else DeepSageGreen,
@@ -214,7 +224,8 @@ fun BalanceSheetTab(
                             periodSummary = reportRows
                         )
                         file?.let {
-                            PdfGeneratorHelper.sharePdf(context, it, "Balance Sheet Statement (${viewMode.label}) - ${settings.businessName}")
+                            val displayMode = getLocalizedViewMode(viewMode, isTamil)
+                            PdfGeneratorHelper.sharePdf(context, it, "${if (isTamil) "இருப்புநிலை அறிக்கை" else "Balance Sheet Statement"} ($displayMode) - ${settings.businessName}")
                         }
                     },
                     shape = RoundedCornerShape(12.dp),
@@ -223,7 +234,7 @@ fun BalanceSheetTab(
                 ) {
                     Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = AlertDueRed, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Export PDF", color = AppTheme.colors.textPrimary, fontSize = 12.sp)
+                    Text(if (isTamil) "பதிவிறக்கு" else "Export PDF", color = AppTheme.colors.textPrimary, fontSize = 12.sp)
                 }
             }
         }
@@ -238,7 +249,7 @@ fun BalanceSheetTab(
             ) {
                 Column(modifier = Modifier.padding(if (responsive.isSmallPhone) 12.dp else 16.dp)) {
                     Text(
-                        text = "Balance Summary",
+                        text = if (isTamil) "இருப்பு சுருக்கம்" else "Balance Summary",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = DeepSageGreen
@@ -250,12 +261,12 @@ fun BalanceSheetTab(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text("Sales Received", fontSize = 11.sp, color = AppTheme.colors.textMuted)
+                            Text(if (isTamil) "பெறப்பட்ட விற்பனை" else "Sales Received", fontSize = 11.sp, color = AppTheme.colors.textMuted)
                             Text(formatInr(totalSales, settings.currency), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = SuccessPaidGreen)
                         }
 
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("Total Expenses", fontSize = 11.sp, color = AppTheme.colors.textMuted)
+                            Text(if (isTamil) "மொத்த செலவுகள்" else "Total Expenses", fontSize = 11.sp, color = AppTheme.colors.textMuted)
                             Text(formatInr(totalExpenses, settings.currency), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = AlertDueRed)
                         }
                     }
@@ -269,7 +280,7 @@ fun BalanceSheetTab(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Net Profit / Margin:", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = AppTheme.colors.textPrimary)
+                        Text(if (isTamil) "நிகர இலாபம் / வரம்பு:" else "Net Profit / Margin:", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = AppTheme.colors.textPrimary)
                         Text(
                             text = formatInr(netBalance, settings.currency),
                             fontSize = 16.sp,
@@ -284,7 +295,7 @@ fun BalanceSheetTab(
         // 3. Period Breakdown List
         item {
             Text(
-                text = "${viewMode.label} Breakdown",
+                text = if (isTamil) "${getLocalizedViewMode(viewMode, isTamil)} விவரம்" else "${viewMode.label} Breakdown",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = AppTheme.colors.textPrimary,
@@ -303,13 +314,13 @@ fun BalanceSheetTab(
                         modifier = Modifier.padding(24.dp).fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("No transaction records found", color = AppTheme.colors.textMuted)
+                        Text(if (isTamil) "பரிவர்த்தனை பதிவுகள் எதுவும் இல்லை" else "No transaction records found", color = AppTheme.colors.textMuted)
                     }
                 }
             }
         } else {
             items(groupedPeriods, key = { it.key }) { group ->
-                BalanceSheetPeriodCard(group = group)
+                BalanceSheetPeriodCard(group = group, isTamil = isTamil)
             }
         }
     }
@@ -326,7 +337,7 @@ data class BalanceSheetGroup(
 )
 
 @Composable
-fun BalanceSheetPeriodCard(group: BalanceSheetGroup) {
+fun BalanceSheetPeriodCard(group: BalanceSheetGroup, isTamil: Boolean = false) {
     var expanded by remember { mutableStateOf(false) }
     val responsive = com.example.ui.theme.rememberResponsiveDimensions()
 
@@ -384,17 +395,17 @@ fun BalanceSheetPeriodCard(group: BalanceSheetGroup) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text("Sales", fontSize = 10.sp, color = AppTheme.colors.textMuted)
+                    Text(if (isTamil) "விற்பனை" else "Sales", fontSize = 10.sp, color = AppTheme.colors.textMuted)
                     Text(formatInr(group.sales), fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = SuccessPaidGreen)
                 }
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Expenses", fontSize = 10.sp, color = AppTheme.colors.textMuted)
+                    Text(if (isTamil) "செலவுகள்" else "Expenses", fontSize = 10.sp, color = AppTheme.colors.textMuted)
                     Text(formatInr(group.expenses), fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = AlertDueRed)
                 }
 
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("Net Margin", fontSize = 10.sp, color = AppTheme.colors.textMuted)
+                    Text(if (isTamil) "நிகர வரம்பு" else "Net Margin", fontSize = 10.sp, color = AppTheme.colors.textMuted)
                     Text(
                         formatInr(group.net),
                         fontSize = 13.sp,
@@ -415,7 +426,7 @@ fun BalanceSheetPeriodCard(group: BalanceSheetGroup) {
                     Spacer(modifier = Modifier.height(8.dp))
 
                     if (group.jobs.isNotEmpty()) {
-                        Text("Jobs & Collections:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DeepSageGreen)
+                        Text(if (isTamil) "வேலைகள் & வசூல்கள்:" else "Jobs & Collections:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DeepSageGreen)
                         group.jobs.forEach { j ->
                             Row(
                                 modifier = Modifier
@@ -423,7 +434,12 @@ fun BalanceSheetPeriodCard(group: BalanceSheetGroup) {
                                     .padding(vertical = 3.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("• ${j.customerName} (${j.workType})", fontSize = 11.sp, color = AppTheme.colors.textSecondary, modifier = Modifier.weight(1f, fill = false), maxLines = 1)
+                                val displayWorkType = if (isTamil && (j.workType == "Payment Received" || j.tractorLabel == "Payment")) {
+                                    "கட்டணம் பெறப்பட்டது"
+                                } else {
+                                    j.workType
+                                }
+                                Text("• ${j.customerName} ($displayWorkType)", fontSize = 11.sp, color = AppTheme.colors.textSecondary, modifier = Modifier.weight(1f, fill = false), maxLines = 1)
                                 Text("+${formatInr(j.amountReceived)}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = SuccessPaidGreen)
                             }
                         }
@@ -431,7 +447,7 @@ fun BalanceSheetPeriodCard(group: BalanceSheetGroup) {
 
                     if (group.expenseItems.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text("Expenses Incurred:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AlertDueRed)
+                        Text(if (isTamil) "ஏற்பட்ட செலவுகள்:" else "Expenses Incurred:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AlertDueRed)
                         group.expenseItems.forEach { e ->
                             Row(
                                 modifier = Modifier

@@ -9,16 +9,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -100,6 +105,44 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+
+fun getLocalizedExpenseType(type: String, isTamil: Boolean): String {
+    if (!isTamil) return type
+    return when (type.trim().lowercase()) {
+        "diesel" -> "டீசல்"
+        "petrol" -> "பெட்ரோல்"
+        "repair" -> "பழுதுபார்ப்பு"
+        "puncture" -> "பஞ்சர்"
+        "oil change" -> "ஆயில் மாற்றம்"
+        "driver bata" -> "டிரைவர் படி"
+        "spare parts" -> "உதிரி பாகங்கள்"
+        "toll / parking" -> "சுங்கச்சாவடி / பார்க்கிங்"
+        "other" -> "இதர"
+        else -> type
+    }
+}
+
+fun getLocalizedPaymentMode(mode: String, isTamil: Boolean): String {
+    if (!isTamil) return mode
+    return when (mode.trim().lowercase()) {
+        "cash" -> "ரொக்கம்"
+        "upi / gpay / phonepe" -> "UPI / ஜிபே / போன்பே"
+        "bank transfer" -> "வங்கி பரிமாற்றம்"
+        "credit / due" -> "கடன் பாக்கி"
+        "cheque" -> "காசோலை"
+        else -> mode
+    }
+}
+
+fun getLocalizedDatePreset(preset: DatePreset, isTamil: Boolean): String {
+    if (!isTamil) return preset.label
+    return when (preset) {
+        DatePreset.TODAY -> "இன்று"
+        DatePreset.THIS_WEEK -> "இந்த வாரம்"
+        DatePreset.THIS_MONTH -> "இந்த மாதம்"
+        DatePreset.ALL_TIME -> "முழுவதும்"
+    }
+}
 
 val ExpenseTypes = listOf(
     "Diesel",
@@ -305,6 +348,7 @@ fun ExpenseReportListScreen(
     onQuickDelete: (ExpenseEntity) -> Unit
 ) {
     val context = LocalContext.current
+    val isTamil = settings.language.equals("TA", ignoreCase = true)
     var searchQuery by remember { mutableStateOf("") }
     var selectedDatePreset by remember { mutableStateOf(DatePreset.ALL_TIME) }
     var customStartDate by remember { mutableLongStateOf(getStartOfDayMillis()) }
@@ -373,17 +417,17 @@ fun ExpenseReportListScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Expense Report",
+                    text = if (isTamil) "செலவு அறிக்கை" else "Expense Report",
                     fontSize = 19.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF111827)
                 )
 
-                // + Add Expense Button
+                // Add Expense Button
                 Button(
                     onClick = onOpenAddExpense,
                     shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF166534)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF072D18)),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                     modifier = Modifier.testTag("btn_add_expense_top")
                 ) {
@@ -395,7 +439,7 @@ fun ExpenseReportListScreen(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "+ Add Expense",
+                        text = if (isTamil) "செலவு சேர்க்க" else "Add Expense",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp
@@ -415,7 +459,7 @@ fun ExpenseReportListScreen(
                 Box {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFF166534),
+                        color = Color(0xFF072D18),
                         modifier = Modifier
                             .clickable { isPresetMenuOpen = true }
                             .height(46.dp)
@@ -425,7 +469,7 @@ fun ExpenseReportListScreen(
                             modifier = Modifier.padding(horizontal = 10.dp)
                         ) {
                             Text(
-                                text = selectedDatePreset.label,
+                                text = getLocalizedDatePreset(selectedDatePreset, isTamil),
                                 color = Color.White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
@@ -446,7 +490,7 @@ fun ExpenseReportListScreen(
                     ) {
                         DatePreset.values().forEach { preset ->
                             DropdownMenuItem(
-                                text = { Text(preset.label) },
+                                text = { Text(getLocalizedDatePreset(preset, isTamil)) },
                                 onClick = {
                                     selectedDatePreset = preset
                                     isPresetMenuOpen = false
@@ -558,14 +602,14 @@ fun ExpenseReportListScreen(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.Person,
                     iconTint = Color(0xFF16A34A),
-                    label = "Operator",
-                    selectedValue = selectedOperatorFilter,
+                    label = if (isTamil) "இயக்குநர்" else "Operator",
+                    selectedValue = if (selectedOperatorFilter == "All") (if (isTamil) "அனைத்தும்" else "All") else selectedOperatorFilter,
                     isOpen = isOperatorMenuOpen,
                     onToggle = { isOperatorMenuOpen = !isOperatorMenuOpen },
                     onDismiss = { isOperatorMenuOpen = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("All Operators", fontWeight = if (selectedOperatorFilter == "All") FontWeight.Bold else FontWeight.Normal) },
+                        text = { Text(if (isTamil) "அனைத்து இயக்குநர்கள்" else "All Operators", fontWeight = if (selectedOperatorFilter == "All") FontWeight.Bold else FontWeight.Normal) },
                         onClick = {
                             selectedOperatorFilter = "All"
                             isOperatorMenuOpen = false
@@ -587,14 +631,14 @@ fun ExpenseReportListScreen(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.DirectionsCar,
                     iconTint = Color(0xFF16A34A),
-                    label = "Tractor",
-                    selectedValue = selectedTractorFilter,
+                    label = if (isTamil) "டிராக்டர்" else "Tractor",
+                    selectedValue = if (selectedTractorFilter == "All") (if (isTamil) "அனைத்தும்" else "All") else selectedTractorFilter,
                     isOpen = isTractorMenuOpen,
                     onToggle = { isTractorMenuOpen = !isTractorMenuOpen },
                     onDismiss = { isTractorMenuOpen = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("All Fleet", fontWeight = if (selectedTractorFilter == "All") FontWeight.Bold else FontWeight.Normal) },
+                        text = { Text(if (isTamil) "அனைத்து டிராக்டர்கள்" else "All Fleet", fontWeight = if (selectedTractorFilter == "All") FontWeight.Bold else FontWeight.Normal) },
                         onClick = {
                             selectedTractorFilter = "All"
                             isTractorMenuOpen = false
@@ -616,14 +660,14 @@ fun ExpenseReportListScreen(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.Tag,
                     iconTint = Color(0xFF16A34A),
-                    label = "Type",
-                    selectedValue = selectedTypeFilter,
+                    label = if (isTamil) "வகை" else "Type",
+                    selectedValue = if (selectedTypeFilter == "All") (if (isTamil) "அனைத்தும்" else "All") else getLocalizedExpenseType(selectedTypeFilter, isTamil),
                     isOpen = isTypeMenuOpen,
                     onToggle = { isTypeMenuOpen = !isTypeMenuOpen },
                     onDismiss = { isTypeMenuOpen = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("All Types", fontWeight = if (selectedTypeFilter == "All") FontWeight.Bold else FontWeight.Normal) },
+                        text = { Text(if (isTamil) "அனைத்து வகைகள்" else "All Types", fontWeight = if (selectedTypeFilter == "All") FontWeight.Bold else FontWeight.Normal) },
                         onClick = {
                             selectedTypeFilter = "All"
                             isTypeMenuOpen = false
@@ -631,7 +675,7 @@ fun ExpenseReportListScreen(
                     )
                     ExpenseTypes.forEach { type ->
                         DropdownMenuItem(
-                            text = { Text(type) },
+                            text = { Text(getLocalizedExpenseType(type, isTamil)) },
                             onClick = {
                                 selectedTypeFilter = type
                                 isTypeMenuOpen = false
@@ -647,7 +691,7 @@ fun ExpenseReportListScreen(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Search description, type, operator...", fontSize = 13.sp, color = Color(0xFF9CA3AF)) },
+                placeholder = { Text(if (isTamil) "விவரம், வகை, இயக்குநர் மூலம் தேடுக..." else "Search description, type, operator...", fontSize = 13.sp, color = Color(0xFF9CA3AF)) },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Search,
@@ -661,7 +705,7 @@ fun ExpenseReportListScreen(
                         IconButton(onClick = { searchQuery = "" }) {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = "Clear",
+                                contentDescription = if (isTamil) "அழி" else "Clear",
                                 tint = Color(0xFF9CA3AF),
                                 modifier = Modifier.size(18.dp)
                             )
@@ -671,14 +715,13 @@ fun ExpenseReportListScreen(
                 singleLine = true,
                 shape = RoundedCornerShape(10.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFF166534),
+                    focusedBorderColor = Color(0xFF072D18),
                     unfocusedBorderColor = Color(0xFFE5E7EB),
                     focusedContainerColor = Color.White,
                     unfocusedContainerColor = Color.White
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
                     .testTag("expense_search_bar")
             )
         }
@@ -686,7 +729,9 @@ fun ExpenseReportListScreen(
         // 3 Stat Cards: Total Expenses, Total Entries, Avg. per Entry
         item {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Card 1: Total Expenses
@@ -695,7 +740,7 @@ fun ExpenseReportListScreen(
                     icon = Icons.Default.ArrowDownward,
                     iconBg = Color(0xFFDCFCE7),
                     iconColor = Color(0xFF16A34A),
-                    title = "Total Expenses",
+                    title = if (isTamil) "மொத்த செலவுகள்" else "Total Expenses",
                     value = formatInr(totalAmount, settings.currency)
                 )
 
@@ -705,7 +750,7 @@ fun ExpenseReportListScreen(
                     icon = Icons.AutoMirrored.Filled.FormatListBulleted,
                     iconBg = Color(0xFFE0E7FF),
                     iconColor = Color(0xFF4F46E5),
-                    title = "Total Entries",
+                    title = if (isTamil) "மொத்த பதிவுகள்" else "Total Entries",
                     value = "$totalCount"
                 )
 
@@ -715,7 +760,7 @@ fun ExpenseReportListScreen(
                     icon = Icons.Default.MonetizationOn,
                     iconBg = Color(0xFFFEF3C7),
                     iconColor = Color(0xFFD97706),
-                    title = "Avg. per Entry",
+                    title = if (isTamil) "சராசரி செலவு" else "Avg. per Entry",
                     value = formatInr(avgAmount, settings.currency)
                 )
             }
@@ -745,14 +790,14 @@ fun ExpenseReportListScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "No expenses found",
+                            text = if (isTamil) "செலவுப் பதிவுகள் ஏதும் இல்லை" else "No expenses found",
                             fontSize = 14.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF374151)
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Tap '+ Add Expense' above to record a new expense",
+                            text = if (isTamil) "புதிய செலவை பதிவு செய்ய மேலே உள்ள '+ செலவு சேர்க்க' பொத்தானைத் தட்டவும்" else "Tap '+ Add Expense' above to record a new expense",
                             fontSize = 12.sp,
                             color = Color(0xFF6B7280),
                             textAlign = TextAlign.Center
@@ -765,6 +810,7 @@ fun ExpenseReportListScreen(
                 ExpenseListItemRow(
                     expense = expense,
                     currency = settings.currency,
+                    isTamil = isTamil,
                     onClick = { onOpenExpenseDetails(expense) },
                     onEdit = { onQuickEdit(expense) },
                     onDelete = { onQuickDelete(expense) },
@@ -794,7 +840,7 @@ fun ExpenseReportListScreen(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "Lowest Expense",
+                                text = if (isTamil) "குறைந்தபட்ச செலவு" else "Lowest Expense",
                                 fontSize = 11.5.sp,
                                 color = Color(0xFF4B5563),
                                 fontWeight = FontWeight.Medium
@@ -817,7 +863,7 @@ fun ExpenseReportListScreen(
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "Highest Expense",
+                                text = if (isTamil) "அதிகபட்ச செலவு" else "Highest Expense",
                                 fontSize = 11.5.sp,
                                 color = Color(0xFF4B5563),
                                 fontWeight = FontWeight.Medium
@@ -859,7 +905,7 @@ fun FilterDropdownButton(
             shape = RoundedCornerShape(8.dp),
             color = if (isFiltered) Color(0xFFF0FDF4) else Color.White,
             border = CardDefaults.outlinedCardBorder().copy(
-                brush = SolidColor(if (isFiltered) Color(0xFF16A34A) else Color(0xFFE5E7EB))
+                brush = SolidColor(if (isFiltered) Color(0xFF072D18) else Color(0xFFE5E7EB))
             ),
             modifier = Modifier
                 .fillMaxWidth()
@@ -873,7 +919,7 @@ fun FilterDropdownButton(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (isFiltered) Color(0xFF16A34A) else iconTint,
+                    tint = if (isFiltered) Color(0xFF072D18) else iconTint,
                     modifier = Modifier.size(15.dp)
                 )
                 Column(modifier = Modifier.weight(1f)) {
@@ -893,7 +939,7 @@ fun FilterDropdownButton(
                             text = selectedValue,
                             fontSize = 10.5.sp,
                             fontWeight = if (isFiltered) FontWeight.Bold else FontWeight.SemiBold,
-                            color = if (isFiltered) Color(0xFF166534) else Color(0xFF111827),
+                            color = if (isFiltered) Color(0xFF072D18) else Color(0xFF111827),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
@@ -934,18 +980,22 @@ fun StatCard(
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         border = CardDefaults.outlinedCardBorder().copy(brush = SolidColor(Color(0xFFE5E7EB))),
-        modifier = modifier
+        modifier = modifier.fillMaxHeight()
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Box(
                     modifier = Modifier
-                        .size(20.dp)
+                        .size(18.dp)
                         .clip(CircleShape)
                         .background(iconBg),
                     contentAlignment = Alignment.Center
@@ -962,14 +1012,16 @@ fun StatCard(
                     fontSize = 10.sp,
                     color = Color(0xFF4B5563),
                     fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    maxLines = 2,
+                    lineHeight = 12.sp,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
             }
-            Spacer(modifier = Modifier.height(5.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = value,
-                fontSize = 13.5.sp,
+                fontSize = 12.5.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF111827),
                 maxLines = 1,
@@ -986,6 +1038,7 @@ fun StatCard(
 fun ExpenseListItemRow(
     expense: ExpenseEntity,
     currency: String,
+    isTamil: Boolean = false,
     onClick: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -993,7 +1046,7 @@ fun ExpenseListItemRow(
 ) {
     var isMenuExpanded by remember { mutableStateOf(false) }
     val visualConfig = getExpenseVisualConfig(expense.expenseType)
-    val itemDateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()) }
+    val itemDateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", if (isTamil) Locale("ta", "IN") else Locale.getDefault()) }
 
     Card(
         shape = RoundedCornerShape(12.dp),
@@ -1021,7 +1074,7 @@ fun ExpenseListItemRow(
             ) {
                 Icon(
                     imageVector = visualConfig.icon,
-                    contentDescription = expense.expenseType,
+                    contentDescription = getLocalizedExpenseType(expense.expenseType, isTamil),
                     tint = visualConfig.tintColor,
                     modifier = Modifier.size(22.dp)
                 )
@@ -1030,7 +1083,7 @@ fun ExpenseListItemRow(
             // Middle Info Column (Expense Type, Tractor, Operator, Description)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = expense.expenseType,
+                    text = getLocalizedExpenseType(expense.expenseType, isTamil),
                     fontSize = 14.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF111827)
@@ -1099,8 +1152,8 @@ fun ExpenseListItemRow(
                             onDismissRequest = { isMenuExpanded = false }
                         ) {
                             DropdownMenuItem(
-                                leadingIcon = { Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = Color(0xFF166534)) },
-                                text = { Text("View Details") },
+                                leadingIcon = { Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = Color(0xFF072D18)) },
+                                text = { Text(if (isTamil) "விவரங்களைக் காண்க" else "View Details") },
                                 onClick = {
                                     isMenuExpanded = false
                                     onClick()
@@ -1108,7 +1161,7 @@ fun ExpenseListItemRow(
                             )
                             DropdownMenuItem(
                                 leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = Color(0xFF2563EB)) },
-                                text = { Text("Edit Expense") },
+                                text = { Text(if (isTamil) "செலவைத் திருத்து" else "Edit Expense") },
                                 onClick = {
                                     isMenuExpanded = false
                                     onEdit()
@@ -1116,7 +1169,7 @@ fun ExpenseListItemRow(
                             )
                             DropdownMenuItem(
                                 leadingIcon = { Icon(Icons.Default.Share, contentDescription = null, tint = Color(0xFF16A34A)) },
-                                text = { Text("Share WhatsApp") },
+                                text = { Text(if (isTamil) "வாட்ஸ்அப்பில் பகிர்க" else "Share WhatsApp") },
                                 onClick = {
                                     isMenuExpanded = false
                                     onShare()
@@ -1124,7 +1177,7 @@ fun ExpenseListItemRow(
                             )
                             DropdownMenuItem(
                                 leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFDC2626)) },
-                                text = { Text("Delete", color = Color(0xFFDC2626)) },
+                                text = { Text(if (isTamil) "நீக்கு" else "Delete", color = Color(0xFFDC2626)) },
                                 onClick = {
                                     isMenuExpanded = false
                                     onDelete()
@@ -1159,6 +1212,7 @@ fun AddOrEditExpenseScreen(
     onSaveExpense: (ExpenseEntity) -> Unit
 ) {
     val context = LocalContext.current
+    val isTamil = settings.language.equals("TA", ignoreCase = true)
 
     // Operator Default: If creating a new expense, default to whoever is logged in (settings.activePartnerName)
     val defaultOperatorName = remember(initialExpense, settings.activePartnerName, partners) {
@@ -1196,7 +1250,7 @@ fun AddOrEditExpenseScreen(
     var hasValidated by remember { mutableStateOf(false) }
     val isAmountValid = (amountText.toDoubleOrNull() ?: 0.0) > 0
 
-    val formDateFormat = remember { SimpleDateFormat("dd/MM/yyyy  hh:mm a", java.util.Locale.getDefault()) }
+    val formDateFormat = remember { SimpleDateFormat("dd/MM/yyyy  hh:mm a", if (isTamil) Locale("ta", "IN") else java.util.Locale.getDefault()) }
 
     fun doSave() {
         hasValidated = true
@@ -1226,13 +1280,13 @@ fun AddOrEditExpenseScreen(
     ) {
         // Top Navigation Bar
         Surface(
-            color = Color(0xFF166534), // Dark Emerald Header
+            color = Color(0xFF072D18), // Consistent Dark Green Header
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -1240,13 +1294,13 @@ fun AddOrEditExpenseScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = if (isTamil) "பின்விளக்கம்" else "Back",
                             tint = Color.White
                         )
                     }
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (isEditMode) "Edit Expense" else "Add Expense",
+                        text = if (isEditMode) (if (isTamil) "செலவைத் திருத்து" else "Edit Expense") else (if (isTamil) "செலவு சேர்க்க" else "Add Expense"),
                         color = Color.White,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
@@ -1263,13 +1317,13 @@ fun AddOrEditExpenseScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Save,
-                        contentDescription = "Save",
+                        contentDescription = if (isTamil) "சேமி" else "Save",
                         tint = Color.White,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Save",
+                        text = if (isTamil) "சேமி" else "Save",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
@@ -1282,6 +1336,7 @@ fun AddOrEditExpenseScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .imePadding()
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
@@ -1295,7 +1350,7 @@ fun AddOrEditExpenseScreen(
                     FormFieldCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.CalendarToday,
-                        label = "Date & Time*",
+                        label = if (isTamil) "தேதி & நேரம்*" else "Date & Time*",
                         value = formDateFormat.format(Date(selectedTimestamp)),
                         isDropdown = false,
                         onClick = {
@@ -1309,8 +1364,8 @@ fun AddOrEditExpenseScreen(
                     Box(modifier = Modifier.weight(1f)) {
                         FormFieldCard(
                             icon = Icons.Default.Tag,
-                            label = "Expense Type*",
-                            value = selectedType,
+                            label = if (isTamil) "செலவு வகை*" else "Expense Type*",
+                            value = getLocalizedExpenseType(selectedType, isTamil),
                             isDropdown = true,
                             onClick = { isTypeDropdownOpen = true }
                         )
@@ -1321,7 +1376,7 @@ fun AddOrEditExpenseScreen(
                         ) {
                             ExpenseTypes.forEach { type ->
                                 DropdownMenuItem(
-                                    text = { Text(type) },
+                                    text = { Text(getLocalizedExpenseType(type, isTamil)) },
                                     onClick = {
                                         selectedType = type
                                         isTypeDropdownOpen = false
@@ -1343,7 +1398,7 @@ fun AddOrEditExpenseScreen(
                     Box(modifier = Modifier.weight(1f)) {
                         FormFieldCard(
                             icon = Icons.Default.Person,
-                            label = "Operator*",
+                            label = if (isTamil) "இயக்குநர்*" else "Operator*",
                             value = selectedOperator,
                             isDropdown = true,
                             onClick = { isOperatorDropdownOpen = true }
@@ -1370,7 +1425,7 @@ fun AddOrEditExpenseScreen(
                     Box(modifier = Modifier.weight(1f)) {
                         FormFieldCard(
                             icon = Icons.Default.DirectionsCar,
-                            label = "Tractor (Chassis No.)*",
+                            label = if (isTamil) "டிராக்டர் (சேஸ் எண்)*" else "Tractor (Chassis No.)*",
                             value = selectedTractor,
                             isDropdown = true,
                             onClick = { isTractorDropdownOpen = true }
@@ -1398,13 +1453,13 @@ fun AddOrEditExpenseScreen(
             item {
                 FormInputCard(
                     iconText = "₹",
-                    label = "Amount (₹)*",
+                    label = if (isTamil) "தொகை (₹)*" else "Amount (₹)*",
                     value = amountText,
                     onValueChange = { amountText = it },
                     keyboardType = KeyboardType.Number,
-                    placeholder = "e.g. 2500",
+                    placeholder = if (isTamil) "எ.கா: 2500" else "e.g. 2500",
                     isError = hasValidated && !isAmountValid,
-                    errorMessage = "Please enter a valid amount greater than 0",
+                    errorMessage = if (isTamil) "தயவுசெய்து 0 ஐ விட அதிகமான சரியான தொகையை உள்ளிடவும்" else "Please enter a valid amount greater than 0",
                     testTag = "input_expense_amount"
                 )
             }
@@ -1413,11 +1468,11 @@ fun AddOrEditExpenseScreen(
             item {
                 FormInputCard(
                     icon = Icons.Default.Description,
-                    label = "Description / Purpose (Optional)",
+                    label = if (isTamil) "விவரம் / நோக்கம் (விருப்பத்தேர்வு)" else "Description / Purpose (Optional)",
                     value = descriptionText,
                     onValueChange = { descriptionText = it },
                     keyboardType = KeyboardType.Text,
-                    placeholder = "e.g. Diesel for field work / Tyre puncture repair",
+                    placeholder = if (isTamil) "எ.கா: களப் பணிக்கான டீசல் / டயர் பஞ்சர் பழுதுபார்த்தல்" else "e.g. Diesel for field work / Tyre puncture repair",
                     testTag = "input_expense_description"
                 )
             }
@@ -1428,8 +1483,8 @@ fun AddOrEditExpenseScreen(
                     FormFieldCard(
                         modifier = Modifier.fillMaxWidth(),
                         icon = Icons.Default.Payments,
-                        label = "Payment Mode",
-                        value = paymentMode,
+                        label = if (isTamil) "கட்டண முறை" else "Payment Mode",
+                        value = getLocalizedPaymentMode(paymentMode, isTamil),
                         isDropdown = true,
                         onClick = { isPaymentModeDropdownOpen = true }
                     )
@@ -1440,7 +1495,7 @@ fun AddOrEditExpenseScreen(
                     ) {
                         PaymentModes.forEach { mode ->
                             DropdownMenuItem(
-                                text = { Text(mode) },
+                                text = { Text(getLocalizedPaymentMode(mode, isTamil)) },
                                 onClick = {
                                     paymentMode = mode
                                     isPaymentModeDropdownOpen = false
@@ -1454,7 +1509,7 @@ fun AddOrEditExpenseScreen(
             // Required fields note
             item {
                 Text(
-                    text = "* Required fields",
+                    text = if (isTamil) "* கட்டாயப் புலங்கள்" else "* Required fields",
                     fontSize = 11.5.sp,
                     color = Color(0xFFDC2626),
                     fontWeight = FontWeight.Medium
@@ -1467,7 +1522,7 @@ fun AddOrEditExpenseScreen(
                 Button(
                     onClick = { doSave() },
                     shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF166534)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF072D18)),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp)
@@ -1481,7 +1536,7 @@ fun AddOrEditExpenseScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isEditMode) "Update Expense" else "Save Expense",
+                        text = if (isEditMode) (if (isTamil) "செலவைப் புதுப்பி" else "Update Expense") else (if (isTamil) "செலவைச் சேமி" else "Save Expense"),
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp
@@ -1504,9 +1559,10 @@ fun ExpenseDetailsScreen(
     onDelete: () -> Unit
 ) {
     val context = LocalContext.current
+    val isTamil = settings.language.equals("TA", ignoreCase = true)
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     val visualConfig = getExpenseVisualConfig(expense.expenseType)
-    val detailsDateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()) }
+    val detailsDateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", if (isTamil) Locale("ta", "IN") else Locale.getDefault()) }
 
     Column(
         modifier = Modifier
@@ -1515,13 +1571,13 @@ fun ExpenseDetailsScreen(
     ) {
         // Top Green Header
         Surface(
-            color = Color(0xFF166534),
+            color = Color(0xFF072D18), // Consistent Dark Green Header
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -1529,13 +1585,13 @@ fun ExpenseDetailsScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = if (isTamil) "பின்விளக்கம்" else "Back",
                             tint = Color.White
                         )
                     }
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Expense Details",
+                        text = if (isTamil) "செலவு விவரங்கள்" else "Expense Details",
                         color = Color.White,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
@@ -1552,7 +1608,7 @@ fun ExpenseDetailsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
-                            contentDescription = "Share",
+                            contentDescription = if (isTamil) "பகிர்" else "Share",
                             tint = Color.White
                         )
                     }
@@ -1563,7 +1619,7 @@ fun ExpenseDetailsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit Expense",
+                            contentDescription = if (isTamil) "செலவைத் திருத்து" else "Edit Expense",
                             tint = Color.White
                         )
                     }
@@ -1614,14 +1670,14 @@ fun ExpenseDetailsScreen(
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = expense.expenseType,
+                                text = getLocalizedExpenseType(expense.expenseType, isTamil),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF111827)
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (expense.description.isNotBlank()) expense.description else "No description provided",
+                                text = if (expense.description.isNotBlank()) expense.description else (if (isTamil) "விவரங்கள் எதுவும் வழங்கப்படவில்லை" else "No description provided"),
                                 fontSize = 12.5.sp,
                                 color = Color(0xFF6B7280),
                                 maxLines = 3,
@@ -1639,7 +1695,7 @@ fun ExpenseDetailsScreen(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Cash",
+                            text = getLocalizedPaymentMode("Cash", isTamil),
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF16A34A)
@@ -1669,13 +1725,13 @@ fun ExpenseDetailsScreen(
                         DetailInfoItem(
                             modifier = Modifier.weight(1f),
                             icon = Icons.Default.CalendarToday,
-                            label = "Date & Time",
+                            label = if (isTamil) "தேதி & நேரம்" else "Date & Time",
                             value = detailsDateFormat.format(Date(expense.dateTimestamp))
                         )
                         DetailInfoItem(
                             modifier = Modifier.weight(1f),
                             icon = Icons.Default.Person,
-                            label = "Operator",
+                            label = if (isTamil) "இயக்குநர்" else "Operator",
                             value = expense.operatorName.ifBlank { settings.activePartnerName }
                         )
                     }
@@ -1690,14 +1746,14 @@ fun ExpenseDetailsScreen(
                         DetailInfoItem(
                             modifier = Modifier.weight(1f),
                             icon = Icons.Default.DirectionsCar,
-                            label = "Tractor (Chassis No.)",
+                            label = if (isTamil) "டிராக்டர் (சேஸ் எண்)" else "Tractor (Chassis No.)",
                             value = expense.tractorLabel
                         )
                         DetailInfoItem(
                             modifier = Modifier.weight(1f),
                             icon = Icons.Default.Tag,
-                            label = "Expense Type",
-                            value = expense.expenseType
+                            label = if (isTamil) "செலவு வகை" else "Expense Type",
+                            value = getLocalizedExpenseType(expense.expenseType, isTamil)
                         )
                     }
 
@@ -1711,13 +1767,13 @@ fun ExpenseDetailsScreen(
                         DetailInfoItem(
                             modifier = Modifier.weight(1f),
                             icon = Icons.Default.Person,
-                            label = "Added By",
+                            label = if (isTamil) "சேர்த்தவர்" else "Added By",
                             value = expense.addedByPartner.ifBlank { settings.activePartnerName }
                         )
                         DetailInfoItem(
                             modifier = Modifier.weight(1f),
                             icon = Icons.Default.Schedule,
-                            label = "Created At",
+                            label = if (isTamil) "உருவாக்கப்பட்ட நேரம்" else "Created At",
                             value = detailsDateFormat.format(Date(expense.createdAt))
                         )
                     }
@@ -1744,7 +1800,7 @@ fun ExpenseDetailsScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Delete Expense",
+                    text = if (isTamil) "செலவை நீக்கு" else "Delete Expense",
                     color = Color(0xFFDC2626),
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp
@@ -1757,8 +1813,13 @@ fun ExpenseDetailsScreen(
     if (showDeleteConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
-            title = { Text("Delete Expense?", fontWeight = FontWeight.Bold) },
-            text = { Text("Are you sure you want to delete this ${expense.expenseType} record of ${formatInr(expense.amount, settings.currency)}? This action cannot be undone.") },
+            title = { Text(if (isTamil) "செலவை நீக்கவா?" else "Delete Expense?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    text = if (isTamil) "ரூ. ${formatInr(expense.amount, settings.currency)} மதிப்புள்ள இந்த ${getLocalizedExpenseType(expense.expenseType, isTamil)} செலவுப் பதிவை நிச்சயமாக நீக்க விரும்புகிறீர்களா? இந்தச் செயலைத் திரும்பப் பெற முடியாது."
+                    else "Are you sure you want to delete this ${expense.expenseType} record of ${formatInr(expense.amount, settings.currency)}? This action cannot be undone."
+                )
+            },
             confirmButton = {
                 Button(
                     onClick = {
@@ -1767,12 +1828,12 @@ fun ExpenseDetailsScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
                 ) {
-                    Text("Delete", color = Color.White)
+                    Text(if (isTamil) "நீக்கு" else "Delete", color = Color.White)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirmDialog = false }) {
-                    Text("Cancel")
+                    Text(if (isTamil) "ரத்து" else "Cancel")
                 }
             }
         )

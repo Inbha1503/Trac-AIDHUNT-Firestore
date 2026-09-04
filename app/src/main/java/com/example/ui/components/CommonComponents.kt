@@ -600,9 +600,47 @@ fun buildWhatsAppUrl(phoneNumber: String?, message: String = ""): String {
 }
 
 fun sendWhatsAppMessage(context: Context, phoneNumber: String?, message: String) {
-    val url = buildWhatsAppUrl(phoneNumber, message)
+    val formattedPhone = formatWhatsAppPhone(phoneNumber)
+    val encodedMessage = if (message.isNotBlank()) {
+        try {
+            java.net.URLEncoder.encode(message, "UTF-8").replace("+", "%20")
+        } catch (e: Exception) {
+            Uri.encode(message)
+        }
+    } else ""
+
+    val url = if (formattedPhone.isNotBlank()) {
+        if (encodedMessage.isNotBlank()) "https://api.whatsapp.com/send?phone=$formattedPhone&text=$encodedMessage"
+        else "https://api.whatsapp.com/send?phone=$formattedPhone"
+    } else {
+        if (encodedMessage.isNotBlank()) "https://api.whatsapp.com/send?text=$encodedMessage"
+        else "https://api.whatsapp.com/send"
+    }
+
     try {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        val waIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            setPackage("com.whatsapp")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(waIntent)
+    } catch (e1: Exception) {
+        try {
+            val fallbackIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(fallbackIntent)
+        } catch (e2: Exception) {
+            shareGenericText(context, message, "Share Message")
+        }
+    }
+}
+
+fun sendSmsMessage(context: Context, phoneNumber: String?, message: String) {
+    try {
+        val cleanPhone = sanitizePhoneNumberForStorage(phoneNumber)
+        val uri = if (cleanPhone.isNotBlank()) Uri.parse("smsto:$cleanPhone") else Uri.parse("smsto:")
+        val intent = Intent(Intent.ACTION_SENDTO, uri).apply {
+            putExtra("sms_body", message)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
@@ -671,7 +709,7 @@ fun AppTopHeader(
     onPartnerSelected: (PartnerEntity) -> Unit = {},
     rightActionIcon: ImageVector? = null,
     onRightActionClick: (() -> Unit)? = null,
-    isDarkGreenStyle: Boolean = false
+    isDarkGreenStyle: Boolean = true
 ) {
     val isTamil = settings.language.equals("TA", ignoreCase = true)
     val responsive = com.example.ui.theme.rememberResponsiveDimensions()
@@ -705,7 +743,7 @@ fun AppTopHeader(
         label = "flashGlowProgress"
     )
 
-    val headerBgColor = if (isDarkGreenStyle) Color(0xFF0B4725) else AppTheme.colors.surface
+    val headerBgColor = if (isDarkGreenStyle) Color(0xFF072D18) else AppTheme.colors.surface
     val headerTextColor = if (isDarkGreenStyle) Color.White else AppTheme.colors.textPrimary
     val headerIconColor = if (isDarkGreenStyle) Color.White else AppTheme.colors.textPrimary
 
@@ -1616,5 +1654,46 @@ private fun BottomNavItem(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+@Composable
+fun StartupSplashScreen() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF072D18)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = Color(0xFF166534),
+                modifier = Modifier.size(72.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Agriculture,
+                        contentDescription = "AIDHUNT Trac",
+                        tint = Color.White,
+                        modifier = Modifier.size(38.dp)
+                    )
+                }
+            }
+            Text(
+                text = "AIDHUNT Trac Services",
+                color = Color.White,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+            androidx.compose.material3.CircularProgressIndicator(
+                modifier = Modifier.size(28.dp),
+                color = Color(0xFF4ADE80),
+                strokeWidth = 2.5.dp
+            )
+        }
     }
 }

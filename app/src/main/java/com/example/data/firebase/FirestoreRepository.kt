@@ -1170,6 +1170,28 @@ class FirestoreRepository(
         }
     }
 
+    fun listenToCollaborationGroupPendingPhones(groupId: String, onPendingChanged: () -> Unit): ListenerRegistration? {
+        val firestore = db ?: return null
+        if (groupId.isBlank()) return null
+
+        return try {
+            firestore.collection("collaborationGroups").document(groupId)
+                .collection("pendingPhones")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.w(TAG, "Error in collaboration group pendingPhones listener for $groupId: ${error.message}")
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        onPendingChanged()
+                    }
+                }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to register collaboration group pendingPhones listener: ${e.message}")
+            null
+        }
+    }
+
     suspend fun addPartnerToCollaborationGroup(
         ownerWorkspaceId: String,
         ownerUid: String,
@@ -1299,15 +1321,69 @@ class FirestoreRepository(
         return try {
             val snap = firestore.collection("collaborationGroups").document(groupId)
                 .collection("pendingPhones")
-                .whereEqualTo("status", "waiting_for_registration")
                 .get().await()
             snap.documents.mapNotNull { doc ->
                 doc.data?.let { PendingPartnerPhone.fromMap(it) }
-            }
+            }.filter { it.status == "waiting_for_registration" || it.status.isBlank() }
         } catch (e: Exception) {
             Log.w("TRAC_PARTNER", "Failed to get pending phones for $groupId: ${e.message}")
             emptyList()
         }
+    }
+
+    suspend fun checkIsUserOrPhoneAlreadyPartner(
+        uid: String?,
+        normalizedPhone: String,
+        currentOwnerWorkspaceId: String
+    ): Boolean {
+        val firestore = db ?: return false
+        val cleanPhone = normalizePhoneNumber(normalizedPhone)
+        val clean10 = cleanPhone.filter { it.isDigit() }.takeLast(10)
+
+        // 1. If UID is known, check if user is already a member of THIS business
+        if (!uid.isNullOrBlank()) {
+            try {
+                val memberSnap = firestore.collection("collaborationGroups").document(currentOwnerWorkspaceId)
+                    .collection("members").document(uid).get().await()
+                if (memberSnap.exists()) {
+                    val status = memberSnap.getString("status") ?: "active"
+                    if (status == "active") return true
+                }
+                val wsMemberSnap = firestore.collection("workspaces").document(currentOwnerWorkspaceId)
+                    .collection("members").document(uid).get().await()
+                if (wsMemberSnap.exists()) {
+                    val status = wsMemberSnap.getString("status") ?: "active"
+                    if (status == "active") return true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "checkIsUserOrPhoneAlreadyPartner uid check failed: ${e.message}")
+            }
+        }
+
+        // 2. Check if this phone number is already pending or a member in THIS business
+        if (clean10.isNotBlank()) {
+            try {
+                val pendingRef = firestore.collection("collaborationGroups").document(currentOwnerWorkspaceId)
+                    .collection("pendingPhones").document(cleanPhone).get().await()
+                if (pendingRef.exists()) {
+                    return true
+                }
+
+                // Also check if any active member in this group already has this phone
+                val membersSnap = firestore.collection("collaborationGroups").document(currentOwnerWorkspaceId)
+                    .collection("members").get().await()
+                for (doc in membersSnap.documents) {
+                    val phone = doc.getString("phoneNumber") ?: ""
+                    if (phone.filter { it.isDigit() }.takeLast(10) == clean10) {
+                        return true
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "checkIsUserOrPhoneAlreadyPartner phone check failed: ${e.message}")
+            }
+        }
+
+        return false
     }
 
     suspend fun findAndConnectPendingPartnerLinks(
@@ -1325,25 +1401,38 @@ class FirestoreRepository(
         try {
             val pendingQuery = firestore.collectionGroup("pendingPhones")
                 .whereEqualTo("normalizedPhone", formattedPhone)
-                .whereEqualTo("status", "waiting_for_registration")
                 .get().await()
 
-            Log.d("TRAC_PARTNER", "AUTO_CONNECT query phone=$formattedPhone matches=${pendingQuery.documents.size}")
+            if (pendingQuery.documents.isNotEmpty()) {
+                Log.d("TRAC_PENDING", "FOUND matches=${pendingQuery.documents.size}")
+            }
 
             for (doc in pendingQuery.documents) {
                 val data = doc.data ?: continue
                 val pending = PendingPartnerPhone.fromMap(data)
+                
+                if (pending.status != "waiting_for_registration") {
+                    continue
+                }
+                
+                Log.d("TRAC_PENDING", "CLAIM pending connection")
                 val groupId = pending.groupId.ifBlank { doc.reference.parent.parent?.id ?: "" }
                 val addedByUid = pending.addedByUid
 
-                if (groupId.isBlank() || addedByUid.isBlank()) continue
+                if (groupId.isBlank() || addedByUid.isBlank()) {
+                    Log.d("TRAC_PENDING", "FAILED Missing groupId or addedByUid")
+                    continue
+                }
 
                 // Check that collaboration group exists and addedByUid is the owner
                 val groupSnap = firestore.collection("collaborationGroups").document(groupId).get().await()
-                if (!groupSnap.exists()) continue
+                if (!groupSnap.exists()) {
+                    Log.d("TRAC_PENDING", "FAILED Group not found")
+                    continue
+                }
                 val groupOwnerUid = groupSnap.getString("ownerUid")
                 if (groupOwnerUid != null && groupOwnerUid != addedByUid) {
-                    Log.w("TRAC_PARTNER", "Security mismatch for pending phone: ownerUid=$groupOwnerUid addedBy=$addedByUid")
+                    Log.d("TRAC_PENDING", "FAILED Security mismatch for ownerUid=$groupOwnerUid addedBy=$addedByUid")
                     continue
                 }
 
@@ -1366,6 +1455,7 @@ class FirestoreRepository(
                     displayName = partnerName
                 )
                 batch.set(memberRef, groupMember.toMap(), SetOptions.merge())
+                Log.d("TRAC_PENDING", "MEMBER_CREATED")
 
                 // 2. Add user discovery index
                 val partnerIndexRef = firestore.collection("userCollaborationGroups").document(userUid)
@@ -1407,6 +1497,27 @@ class FirestoreRepository(
                     "workspaceName" to "Shared Business"
                 ), SetOptions.merge())
 
+                // 4b. Find and update the existing PartnerEntity / attendee record by normalized phone in the owner's workspace
+                try {
+                    val attendeesRef = firestore.collection("workspaces").document(groupId).collection("attendees")
+                    val attendeesSnap = attendeesRef.get().await()
+                    for (aDoc in attendeesSnap.documents) {
+                        val aPhone = aDoc.getString("phone") ?: ""
+                        if (normalizePhoneNumber(aPhone).filter { it.isDigit() }.takeLast(10) == formattedPhone.filter { it.isDigit() }.takeLast(10)) {
+                            // Link this record by setting "partnerUid" and "status" to "CONNECTED"
+                            val updateData = mapOf(
+                                "partnerUid" to userUid,
+                                "status" to "CONNECTED"
+                            )
+                            batch.set(attendeesRef.document(aDoc.id), updateData, SetOptions.merge())
+                            Log.d("TRAC_PENDING", "CONNECTED to existing attendee doc ${aDoc.id}")
+                            break
+                        }
+                    }
+                } catch (ex: Exception) {
+                    Log.d("TRAC_PENDING", "FAILED Error linking existing attendee doc: ${ex.message}")
+                }
+
                 // 5. Delete pending record
                 batch.delete(doc.reference)
 
@@ -1415,6 +1526,7 @@ class FirestoreRepository(
                 Log.d("TRAC_PARTNER", "AUTO_CONNECT SUCCESS group=$groupId phone=$formattedPhone uid=$userUid")
             }
         } catch (e: Exception) {
+            Log.d("TRAC_PENDING", "FAILED Exception: ${e.message}")
             Log.e("TRAC_PARTNER", "AUTO_CONNECT failed for phone=$formattedPhone: ${e.message}", e)
         }
 

@@ -211,9 +211,11 @@ class ExampleUnitTest {
     @Test
     fun testAuthMethod_enumExistence() {
         val phoneMethod = com.example.ui.screens.auth.AuthMethod.PHONE
-        val gmailMethod = com.example.ui.screens.auth.AuthMethod.GMAIL
+        val emailMethod = com.example.ui.screens.auth.AuthMethod.EMAIL
+        val googleMethod = com.example.ui.screens.auth.AuthMethod.GOOGLE
         assertEquals("PHONE", phoneMethod.name)
-        assertEquals("GMAIL", gmailMethod.name)
+        assertEquals("EMAIL", emailMethod.name)
+        assertEquals("GOOGLE", googleMethod.name)
     }
 
     @Test

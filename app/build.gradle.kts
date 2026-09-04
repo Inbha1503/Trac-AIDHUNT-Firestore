@@ -1,3 +1,5 @@
+import java.util.Properties
+import java.io.FileInputStream
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
 
 plugins {
@@ -17,19 +19,23 @@ android {
     applicationId = "com.aistudio.aidhunttrac.cedlir"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = 4
+    versionName = "1.0.3"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+      val keystorePropertiesFile = rootProject.file("keystore.properties")
+      if (keystorePropertiesFile.exists()) {
+        val keystoreProperties = Properties()
+        keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+        storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
+        storePassword = keystoreProperties["storePassword"] as String
+        keyAlias = keystoreProperties["keyAlias"] as String
+        keyPassword = keystoreProperties["keyPassword"] as String
+      }
     }
     create("debugConfig") {
       storeFile = file("${rootDir}/debug.keystore")

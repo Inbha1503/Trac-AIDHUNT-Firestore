@@ -12,6 +12,8 @@ interface AuthService {
 
     fun startAuthStateListener()
     suspend fun signInWithGoogle(context: Context, webClientId: String? = null): Result<UserProfile>
+    suspend fun signInWithEmail(email: String, password: String): Result<UserProfile>
+    suspend fun signUpWithEmail(email: String, password: String): Result<UserProfile>
     fun sendPhoneOtp(
         activity: Activity,
         phoneNumber: String,

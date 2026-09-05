@@ -1398,16 +1398,30 @@ class FirestoreRepository(
 
         val connectedGroupIds = mutableListOf<String>()
 
+        val matchingDocs = mutableListOf<com.google.firebase.firestore.DocumentSnapshot>()
         try {
             val pendingQuery = firestore.collectionGroup("pendingPhones")
                 .whereEqualTo("normalizedPhone", formattedPhone)
                 .get().await()
 
-            if (pendingQuery.documents.isNotEmpty()) {
-                Log.d("TRAC_PENDING", "FOUND matches=${pendingQuery.documents.size}")
+            matchingDocs.addAll(pendingQuery.documents)
+            if (matchingDocs.isNotEmpty()) {
+                Log.d("TRAC_PENDING", "FOUND matches=${matchingDocs.size}")
             }
+        } catch (e: com.google.firebase.firestore.FirebaseFirestoreException) {
+            if (e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.FAILED_PRECONDITION &&
+                e.message?.contains("index", ignoreCase = true) == true
+            ) {
+                Log.w("TRAC_PARTNER", "AUTO_CONNECT: collectionGroup pendingPhones index pending creation in Firestore console: ${e.message}")
+            } else {
+                Log.w("TRAC_PARTNER", "AUTO_CONNECT: collectionGroup pendingPhones query error: ${e.message}")
+            }
+        } catch (e: Exception) {
+            Log.w("TRAC_PARTNER", "AUTO_CONNECT: unexpected query error: ${e.message}")
+        }
 
-            for (doc in pendingQuery.documents) {
+        for (doc in matchingDocs) {
+            try {
                 val data = doc.data ?: continue
                 val pending = PendingPartnerPhone.fromMap(data)
                 
@@ -1524,10 +1538,9 @@ class FirestoreRepository(
                 batch.commit().await()
                 connectedGroupIds.add(groupId)
                 Log.d("TRAC_PARTNER", "AUTO_CONNECT SUCCESS group=$groupId phone=$formattedPhone uid=$userUid")
+            } catch (docEx: Exception) {
+                Log.w("TRAC_PARTNER", "AUTO_CONNECT failed processing doc ${doc.id}: ${docEx.message}")
             }
-        } catch (e: Exception) {
-            Log.d("TRAC_PENDING", "FAILED Exception: ${e.message}")
-            Log.e("TRAC_PARTNER", "AUTO_CONNECT failed for phone=$formattedPhone: ${e.message}", e)
         }
 
         return connectedGroupIds

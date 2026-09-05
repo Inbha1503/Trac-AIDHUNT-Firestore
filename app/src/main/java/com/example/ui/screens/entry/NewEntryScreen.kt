@@ -1,5 +1,6 @@
 package com.example.ui.screens.entry
 
+import com.example.ui.utils.trackFocusedField
 import android.app.TimePickerDialog
 import android.content.Context
 import android.util.Log
@@ -10,10 +11,10 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,10 +24,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -66,6 +71,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +79,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.ime
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -102,10 +118,27 @@ import com.example.ui.theme.TextMutedDark
 import com.example.ui.theme.TextSecondaryDark
 import com.example.ui.viewmodel.FIXED_WORK_TYPES
 import com.example.ui.viewmodel.NewEntryDraft
+import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+private enum class FocusedField {
+    NONE,
+    NAME,
+    PHONE,
+    LOCATION,
+    HOURS,
+    MINUTES,
+    HOURLY_RATE,
+    WORK_AMOUNT,
+    EXTRA_CHARGES,
+    AMOUNT_RECEIVED,
+    EXPENSE_AMOUNT,
+    EXPENSE_DESC,
+    NOTES
+}
+
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun NewEntryScreen(
     settings: AppSettingsEntity,
@@ -215,6 +248,25 @@ fun NewEntryScreen(
     val hasAttemptedReview = draft.hasAttemptedReview
     var showClearConfirmationDialog by remember { mutableStateOf(false) }
 
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
+    val tractorRequester = remember { BringIntoViewRequester() }
+    val workTypeRequester = remember { BringIntoViewRequester() }
+    val expenseTypeRequester = remember { BringIntoViewRequester() }
+    val customerNameRequester = remember { BringIntoViewRequester() }
+    val customerPhoneRequester = remember { BringIntoViewRequester() }
+    val customerLocationRequester = remember { BringIntoViewRequester() }
+    val hoursRequester = remember { BringIntoViewRequester() }
+    val minutesRequester = remember { BringIntoViewRequester() }
+    val hourlyRateRequester = remember { BringIntoViewRequester() }
+    val workAmountRequester = remember { BringIntoViewRequester() }
+    val extraChargesRequester = remember { BringIntoViewRequester() }
+    val amountReceivedRequester = remember { BringIntoViewRequester() }
+    val expenseAmountRequester = remember { BringIntoViewRequester() }
+    val expenseDescRequester = remember { BringIntoViewRequester() }
+    val notesRequester = remember { BringIntoViewRequester() }
+
     BackHandler(enabled = showClearConfirmationDialog) {
         Log.d("TRAC_ENTRY", "BackHandler: dismissing clear confirmation dialog")
         showClearConfirmationDialog = false
@@ -246,8 +298,12 @@ fun NewEntryScreen(
         }
     }
 
-    val customerSuggestions = if (customerNameInput.trim().length >= 1) {
-        customers.filter { it.name.contains(customerNameInput.trim(), ignoreCase = true) }
+    val customerSuggestions = if (customerPhoneInput.trim().isNotEmpty()) {
+        val queryDigits = customerPhoneInput.filter { it.isDigit() }
+        customers.filter { c ->
+            val cDigits = c.phone.filter { it.isDigit() }
+            cDigits.contains(queryDigits)
+        }
     } else {
         emptyList()
     }
@@ -368,13 +424,15 @@ fun NewEntryScreen(
         )
     } else {
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .imePadding()
                 .background(AppTheme.colors.background),
             contentPadding = PaddingValues(
-                horizontal = responsive.screenPaddingHorizontal,
-                vertical = responsive.screenPaddingVertical
+                start = responsive.screenPaddingHorizontal,
+                end = responsive.screenPaddingHorizontal,
+                top = responsive.screenPaddingVertical,
+                bottom = 120.dp
             ),
             verticalArrangement = Arrangement.spacedBy(if (responsive.isSmallPhone) 10.dp else 14.dp)
         ) {
@@ -435,8 +493,8 @@ fun NewEntryScreen(
             item {
                 Card(
                     shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = AppTheme.colors.cardBg),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(AppTheme.colors.cardBorder)),
+                    colors = CardDefaults.cardColors(containerColor = SoftSageGreen),
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(SageOutline)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -595,6 +653,7 @@ fun NewEntryScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .menuAnchor()
+                                    .trackFocusedField(tractorRequester, coroutineScope)
                                     .testTag("entry_tractor_dropdown"),
                                 shape = RoundedCornerShape(12.dp)
                             )
@@ -639,6 +698,7 @@ fun NewEntryScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .menuAnchor()
+                                    .trackFocusedField(workTypeRequester, coroutineScope)
                                     .testTag("entry_work_type_dropdown"),
                                 shape = RoundedCornerShape(12.dp)
                             )
@@ -687,7 +747,6 @@ fun NewEntryScreen(
                             value = customerNameInput,
                             onValueChange = {
                                 onUpdateDraft(draft.copy(customerNameInput = it, matchedCustomerId = 0L))
-                                showSuggestions = true
                             },
                             label = { Text(if (isTamil) "விவசாயி / வாடிக்கையாளர் பெயர் *" else "Customer Name *") },
                             leadingIcon = {
@@ -706,11 +765,74 @@ fun NewEntryScreen(
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .trackFocusedField(customerNameRequester, coroutineScope)
                                 .testTag("entry_customer_name_input"),
                             shape = RoundedCornerShape(12.dp)
                         )
 
-                        // Smooth Non-intrusive Suggestion Cards below input
+                        // Customer Phone & Location
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = customerPhoneInput,
+                                onValueChange = { input ->
+                                    val digitsOnly = input.filter { it.isDigit() }.take(10)
+                                    onUpdateDraft(draft.copy(customerPhoneInput = digitsOnly))
+                                    showSuggestions = true
+                                },
+                                label = { Text(if (isTamil) "மொபைல் எண் *" else "Mobile Number *") },
+                                placeholder = { Text(if (isTamil) "10 இலக்க எண்" else "10-digit mobile number", fontSize = 12.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Phone,
+                                        contentDescription = null,
+                                        tint = if (hasAttemptedReview && isCustomerPhoneInvalid) AlertDueRed else SageAccent
+                                    )
+                                },
+                                singleLine = true,
+                                isError = hasAttemptedReview && isCustomerPhoneInvalid,
+                                supportingText = {
+                                    if (hasAttemptedReview && isCustomerPhoneInvalid) {
+                                        Text(
+                                            text = if (isTamil) "சரியான 10 இலக்க மொபைல் எண் தேவை" else "Please enter a valid 10-digit mobile number",
+                                            color = AlertDueRed,
+                                            fontSize = 10.sp
+                                        )
+                                    } else if (customerPhoneInput.length == 10) {
+                                        Text("WhatsApp: +91 $customerPhoneInput", color = SuccessPaidGreen, fontSize = 10.sp)
+                                    }
+                                },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .trackFocusedField(customerPhoneRequester, coroutineScope)
+                                    .testTag("entry_customer_phone_input"),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+
+                            OutlinedTextField(
+                                value = customerLocationInput,
+                                onValueChange = { onUpdateDraft(draft.copy(customerLocationInput = it)) },
+                                label = { Text(if (isTamil) "ஊர் / தோட்டம்" else "Village / Location") },
+                                leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = SageAccent) },
+                                singleLine = true,
+                                supportingText = {
+                                    if (hasAttemptedReview && isCustomerPhoneInvalid) {
+                                        Text("", fontSize = 10.sp)
+                                    } else if (customerPhoneInput.length == 10) {
+                                        Text("", fontSize = 10.sp)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .trackFocusedField(customerLocationRequester, coroutineScope),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                        }
+
+                        // Smooth Non-intrusive Suggestion Cards below phone input
                         AnimatedVisibility(
                             visible = showSuggestions && customerSuggestions.isNotEmpty(),
                             enter = expandVertically() + fadeIn(),
@@ -777,64 +899,6 @@ fun NewEntryScreen(
                                     }
                                 }
                             }
-                        }
-
-                        // Customer Phone & Location
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = customerPhoneInput,
-                                onValueChange = { input ->
-                                    val digitsOnly = input.filter { it.isDigit() }.take(10)
-                                    onUpdateDraft(draft.copy(customerPhoneInput = digitsOnly))
-                                },
-                                label = { Text(if (isTamil) "மொபைல் எண் *" else "Mobile Number *") },
-                                placeholder = { Text(if (isTamil) "10 இலக்க எண்" else "10-digit mobile number", fontSize = 12.sp) },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Default.Phone,
-                                        contentDescription = null,
-                                        tint = if (hasAttemptedReview && isCustomerPhoneInvalid) AlertDueRed else SageAccent
-                                    )
-                                },
-                                singleLine = true,
-                                isError = hasAttemptedReview && isCustomerPhoneInvalid,
-                                supportingText = {
-                                    if (hasAttemptedReview && isCustomerPhoneInvalid) {
-                                        Text(
-                                            text = if (isTamil) "சரியான 10 இலக்க மொபைல் எண் தேவை" else "Please enter a valid 10-digit mobile number",
-                                            color = AlertDueRed,
-                                            fontSize = 10.sp
-                                        )
-                                    } else if (customerPhoneInput.length == 10) {
-                                        Text("WhatsApp: +91 $customerPhoneInput", color = SuccessPaidGreen, fontSize = 10.sp)
-                                    }
-                                },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("entry_customer_phone_input"),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-
-                            OutlinedTextField(
-                                value = customerLocationInput,
-                                onValueChange = { onUpdateDraft(draft.copy(customerLocationInput = it)) },
-                                label = { Text(if (isTamil) "ஊர் / தோட்டம்" else "Village / Location") },
-                                leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = SageAccent) },
-                                singleLine = true,
-                                supportingText = {
-                                    if (hasAttemptedReview && isCustomerPhoneInvalid) {
-                                        Text("", fontSize = 10.sp)
-                                    } else if (customerPhoneInput.length == 10) {
-                                        Text("", fontSize = 10.sp)
-                                    }
-                                },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp)
-                            )
                         }
                     }
                 }
@@ -916,7 +980,7 @@ fun NewEntryScreen(
                                     onClick = {
                                         val initH = startHour ?: curCal.get(Calendar.HOUR_OF_DAY)
                                         val initM = startMinute ?: curCal.get(Calendar.MINUTE)
-                                        TimePickerDialog(
+                                        val dialog = TimePickerDialog(
                                             context,
                                             { _, h, m ->
                                                 onUpdateDraft(draft.copy(startHour = h, startMinute = m))
@@ -924,7 +988,8 @@ fun NewEntryScreen(
                                             initH,
                                             initM,
                                             isSystem24Hour
-                                        ).show()
+                                        )
+                                        dialog.show()
                                     },
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier
@@ -948,7 +1013,7 @@ fun NewEntryScreen(
                                     onClick = {
                                         val initH = endHour ?: curCal.get(Calendar.HOUR_OF_DAY)
                                         val initM = endMinute ?: curCal.get(Calendar.MINUTE)
-                                        TimePickerDialog(
+                                        val dialog = TimePickerDialog(
                                             context,
                                             { _, h, m ->
                                                 onUpdateDraft(draft.copy(endHour = h, endMinute = m))
@@ -956,7 +1021,8 @@ fun NewEntryScreen(
                                             initH,
                                             initM,
                                             isSystem24Hour
-                                        ).show()
+                                        )
+                                        dialog.show()
                                     },
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier
@@ -995,6 +1061,7 @@ fun NewEntryScreen(
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     modifier = Modifier
                                         .weight(1f)
+                                        .trackFocusedField(hoursRequester, coroutineScope)
                                         .testTag("entry_manual_hours_input"),
                                     shape = RoundedCornerShape(12.dp)
                                 )
@@ -1014,6 +1081,7 @@ fun NewEntryScreen(
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     modifier = Modifier
                                         .weight(1f)
+                                        .trackFocusedField(minutesRequester, coroutineScope)
                                         .testTag("entry_manual_minutes_input"),
                                     shape = RoundedCornerShape(12.dp)
                                 )
@@ -1081,6 +1149,7 @@ fun NewEntryScreen(
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier
                                     .weight(1f)
+                                    .trackFocusedField(hourlyRateRequester, coroutineScope)
                                     .testTag("entry_hourly_rate_input"),
                                 shape = RoundedCornerShape(12.dp)
                             )
@@ -1100,6 +1169,7 @@ fun NewEntryScreen(
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier
                                     .weight(1f)
+                                    .trackFocusedField(workAmountRequester, coroutineScope)
                                     .testTag("entry_work_amount_input"),
                                 shape = RoundedCornerShape(12.dp)
                             )
@@ -1115,6 +1185,7 @@ fun NewEntryScreen(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .trackFocusedField(extraChargesRequester, coroutineScope)
                                 .testTag("entry_extra_charges_input"),
                             shape = RoundedCornerShape(12.dp)
                         )
@@ -1138,6 +1209,7 @@ fun NewEntryScreen(
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier
                                     .weight(1f)
+                                    .trackFocusedField(amountReceivedRequester, coroutineScope)
                                     .testTag("entry_amount_received_input"),
                                 shape = RoundedCornerShape(12.dp)
                             )
@@ -1271,7 +1343,8 @@ fun NewEntryScreen(
                                                 },
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .menuAnchor(),
+                                                    .menuAnchor()
+                                                    .trackFocusedField(expenseTypeRequester, coroutineScope),
                                                 shape = RoundedCornerShape(12.dp)
                                             )
                                             ExposedDropdownMenu(
@@ -1303,7 +1376,9 @@ fun NewEntryScreen(
                                             }
                                         },
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .trackFocusedField(expenseAmountRequester, coroutineScope),
                                         shape = RoundedCornerShape(12.dp)
                                     )
                                 }
@@ -1313,7 +1388,9 @@ fun NewEntryScreen(
                                     onValueChange = { onUpdateDraft(draft.copy(linkedExpenseDesc = it)) },
                                     label = { Text(if (isTamil) "செலவு விவரம் (எ.கா. 20 லிட்டர் டீசல்)" else "Expense Description") },
                                     singleLine = true,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .trackFocusedField(expenseDescRequester, coroutineScope),
                                     shape = RoundedCornerShape(12.dp)
                                 )
                             }
@@ -1328,7 +1405,9 @@ fun NewEntryScreen(
                     value = notes,
                     onValueChange = { onUpdateDraft(draft.copy(notes = it)) },
                     label = { Text(if (isTamil) "குறிப்புகள் (விருப்பத்தேர்வு)" else "Work Notes (Optional)") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .trackFocusedField(notesRequester, coroutineScope),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = DeepSageGreen,

@@ -1,5 +1,7 @@
-package com.example.ui.screens.auth
 
+package com.example.ui.screens.auth
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,6 +11,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import com.example.ui.utils.trackFocusedField
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -48,12 +55,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.entity.AppSettingsEntity
-
 private val DeepSageGreen = Color(0xFF1B4332)
 private val ForestGreenHeader = Color(0xFF133220)
 private val SoftSageGreen = Color(0xFFE8F0EA)
 private val SageBorder = Color(0xFF81C784)
-
 @Composable
 fun FirstAccountSetupDialog(
     settings: AppSettingsEntity,
@@ -75,14 +80,14 @@ fun FirstAccountSetupDialog(
             initialBusinessName.ifBlank { settings.businessName }
         )
     }
-
     var hasValidated by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
-
+    val coroutineScope = rememberCoroutineScope()
+    val nameRequester = remember { BringIntoViewRequester() }
+    val businessRequester = remember { BringIntoViewRequester() }
     val isDisplayNameValid = displayName.trim().isNotBlank()
     val isBusinessNameValid = businessName.trim().isNotBlank()
     val canSubmit = isDisplayNameValid && isBusinessNameValid
-
     Dialog(
         onDismissRequest = { /* Non-dismissable until setup is completed */ },
         properties = DialogProperties(
@@ -106,6 +111,8 @@ fun FirstAccountSetupDialog(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .imePadding()
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -123,18 +130,14 @@ fun FirstAccountSetupDialog(
                             modifier = Modifier.size(36.dp)
                         )
                     }
-
                     Spacer(modifier = Modifier.height(16.dp))
-
                     Text(
                         text = if (isTamil) "சுயவிவர அமைவு" else "Welcome to AIDHUNT Trac",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = ForestGreenHeader
                     )
-
                     Spacer(modifier = Modifier.height(6.dp))
-
                     Text(
                         text = if (isTamil)
                             "தொடங்குவதற்கு உங்கள் பெயர் மற்றும் வணிகப் பெயரை உள்ளிடவும்"
@@ -144,9 +147,7 @@ fun FirstAccountSetupDialog(
                         color = Color(0xFF555555),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
-
                     Spacer(modifier = Modifier.height(20.dp))
-
                     // 1. Display Name / Owner Name
                     OutlinedTextField(
                         value = displayName,
@@ -184,11 +185,10 @@ fun FirstAccountSetupDialog(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .trackFocusedField(nameRequester, coroutineScope)
                             .testTag("input_setup_display_name")
                     )
-
                     Spacer(modifier = Modifier.height(8.dp))
-
                     // 2. Business Name / Fleet Name
                     OutlinedTextField(
                         value = businessName,
@@ -229,11 +229,10 @@ fun FirstAccountSetupDialog(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .trackFocusedField(businessRequester, coroutineScope)
                             .testTag("input_setup_business_name")
                     )
-
                     Spacer(modifier = Modifier.height(20.dp))
-
                     // Submit Button
                     Button(
                         onClick = {

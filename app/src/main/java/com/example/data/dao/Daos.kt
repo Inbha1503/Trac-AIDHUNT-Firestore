@@ -197,19 +197,19 @@ interface CustomerDao {
 
 @Dao
 interface JobEntryDao {
-    @Query("SELECT * FROM job_entries WHERE workspaceId = :workspaceId ORDER BY startTimeMillis DESC")
+    @Query("SELECT * FROM job_entries WHERE workspaceId = :workspaceId ORDER BY createdAt DESC")
     fun getJobsForWorkspace(workspaceId: String): Flow<List<JobEntryEntity>>
 
-    @Query("SELECT * FROM job_entries WHERE workspaceId IN (:workspaceIds) ORDER BY startTimeMillis DESC")
+    @Query("SELECT * FROM job_entries WHERE workspaceId IN (:workspaceIds) ORDER BY createdAt DESC")
     fun getJobsForWorkspaces(workspaceIds: List<String>): Flow<List<JobEntryEntity>>
 
-    @Query("SELECT * FROM job_entries WHERE workspaceId = :workspaceId ORDER BY startTimeMillis DESC")
+    @Query("SELECT * FROM job_entries WHERE workspaceId = :workspaceId ORDER BY createdAt DESC")
     suspend fun getJobsForWorkspaceOnce(workspaceId: String): List<JobEntryEntity>
 
-    @Query("SELECT * FROM job_entries WHERE workspaceId IN (:workspaceIds) ORDER BY startTimeMillis DESC")
+    @Query("SELECT * FROM job_entries WHERE workspaceId IN (:workspaceIds) ORDER BY createdAt DESC")
     suspend fun getJobsForWorkspacesOnce(workspaceIds: List<String>): List<JobEntryEntity>
 
-    @Query("SELECT * FROM job_entries ORDER BY startTimeMillis DESC")
+    @Query("SELECT * FROM job_entries ORDER BY createdAt DESC")
     fun getAllJobs(): Flow<List<JobEntryEntity>>
 
     @Query("SELECT * FROM job_entries WHERE workspaceId = :workspaceId AND customerId = :customerId ORDER BY startTimeMillis DESC")

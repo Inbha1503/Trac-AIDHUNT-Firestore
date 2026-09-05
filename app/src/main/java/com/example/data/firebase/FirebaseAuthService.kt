@@ -160,7 +160,7 @@ class FirebaseAuthService(
             // Resolve Web Client ID from resources or parameter
             val serverClientId = webClientId?.ifBlank { null }
                 ?: getResourceString(context, "default_web_client_id")
-                ?: "1043385667408-mock-client-id.apps.googleusercontent.com"
+                ?: "898996717587-udfsfb6gtt14v5n6phjoima6kt1rjj9r.apps.googleusercontent.com"
 
             val googleIdOption = GetSignInWithGoogleOption.Builder(serverClientId)
                 .build()

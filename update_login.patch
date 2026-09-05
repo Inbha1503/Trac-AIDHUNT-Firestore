@@ -1,0 +1,45 @@
+--- app/src/main/java/com/example/ui/screens/auth/LoginScreen.kt
++++ app/src/main/java/com/example/ui/screens/auth/LoginScreen.kt
+@@ -40,2 +40,5 @@
+ import androidx.compose.material3.MaterialTheme
++import androidx.compose.foundation.ExperimentalFoundationApi
++import androidx.compose.foundation.relocation.BringIntoViewRequester
++import com.example.ui.utils.trackFocusedField
+ import androidx.compose.material3.OutlinedButton
+@@ -107,2 +110,6 @@
+ 
++@OptIn(ExperimentalFoundationApi::class)
+ @Composable
+ fun LoginScreen(
+@@ -120,2 +127,10 @@
+     val focusManager = LocalFocusManager.current
++    val coroutineScope = rememberCoroutineScope()
++
++    // Requesters for TextFields
++    val phoneRequester = remember { BringIntoViewRequester() }
++    val otpRequester = remember { BringIntoViewRequester() }
++    val emailRequester = remember { BringIntoViewRequester() }
++    val passwordRequester = remember { BringIntoViewRequester() }
++    val adminPassRequester = remember { BringIntoViewRequester() }
+ 
+@@ -419,2 +434,3 @@
+                                     .fillMaxWidth()
++                                    .trackFocusedField(phoneRequester, coroutineScope)
+                                     .testTag("login_phone_input"),
+@@ -452,2 +468,4 @@
+                                     ),
++                                    modifier = Modifier.fillMaxWidth()
++                                        .trackFocusedField(otpRequester, coroutineScope),
+                                     colors = OutlinedTextFieldDefaults.colors(
+@@ -583,2 +601,3 @@
+                                 modifier = Modifier.fillMaxWidth()
++                                    .trackFocusedField(emailRequester, coroutineScope)
+                                     .testTag("login_email_input"),
+@@ -620,2 +639,3 @@
+                                 modifier = Modifier.fillMaxWidth()
++                                    .trackFocusedField(passwordRequester, coroutineScope)
+                                     .testTag("login_password_input"),
+@@ -668,2 +688,3 @@
+                                 modifier = Modifier.fillMaxWidth()
++                                    .trackFocusedField(adminPassRequester, coroutineScope)
+                                     .testTag("login_admin_password_input"),

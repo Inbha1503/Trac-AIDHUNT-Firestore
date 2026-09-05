@@ -1,5 +1,7 @@
-package com.example.ui.screens.report
 
+package com.example.ui.screens.report
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
@@ -13,6 +15,11 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import com.example.ui.utils.trackFocusedField
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -94,7 +101,6 @@ import com.example.ui.theme.SoftSageGreen
 import com.example.ui.theme.SuccessPaidGreen
 import com.example.ui.theme.TextMutedDark
 import com.example.ui.theme.TextSecondaryDark
-
 fun getLocalizedWithdrawalCategory(category: String, isTamil: Boolean): String {
     if (!isTamil) return category
     return when (category.trim().lowercase()) {
@@ -108,7 +114,6 @@ fun getLocalizedWithdrawalCategory(category: String, isTamil: Boolean): String {
         else -> category
     }
 }
-
 val WithdrawalCategories = listOf(
     "Personal Use",
     "Fuel Advance",
@@ -118,7 +123,6 @@ val WithdrawalCategories = listOf(
     "Maintenance Advance",
     "Other"
 )
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun WithdrawalTab(
@@ -137,13 +141,10 @@ fun WithdrawalTab(
     var draftPartnerFilter by remember { mutableStateOf("All") }
     var isFilterExpanded by remember { mutableStateOf(false) }
     var withdrawalToDelete by remember { mutableStateOf<WithdrawalEntity?>(null) }
-
     val filteredWithdrawals = withdrawals.filter {
         selectedPartnerFilter == "All" || it.partnerName.contains(selectedPartnerFilter, ignoreCase = true)
     }
-
     val currentFilteredTotal = filteredWithdrawals.sumOf { it.amount }
-
     // Dynamic Pie Chart Slices matching active filters
     val pieSlices = remember(filteredWithdrawals, partners, selectedPartnerFilter) {
         val targetPartners = if (selectedPartnerFilter == "All") {
@@ -151,7 +152,6 @@ fun WithdrawalTab(
         } else {
             partners.filter { it.name.contains(selectedPartnerFilter, ignoreCase = true) }
         }
-
         targetPartners.mapIndexed { index, partner ->
             val pWithdrawals = filteredWithdrawals.filter { it.partnerName.contains(partner.name, ignoreCase = true) }
             val amount = pWithdrawals.sumOf { it.amount }
@@ -165,10 +165,14 @@ fun WithdrawalTab(
             )
         }
     }
-
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = 16.dp,
+            bottom = 100.dp
+        ),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // 1. Actions: Single Primary Action "+ Take Amount" + Secondary "PDF Report"
@@ -194,7 +198,6 @@ fun WithdrawalTab(
                         fontSize = 14.sp
                     )
                 }
-
                 OutlinedButton(
                     onClick = {
                         val file = PdfGeneratorHelper.generateWithdrawalReportPdf(
@@ -226,7 +229,6 @@ fun WithdrawalTab(
                 }
             }
         }
-
         // 2. Available Liquidity & Withdrawn Summary Card
         item {
             Card(
@@ -250,7 +252,6 @@ fun WithdrawalTab(
                             )
                             Text(formatInr(availableAmount), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = DeepSageGreen)
                         }
-
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
                                 text = if (isTamil) "மொத்த எடுப்புகள்" else "Total Drawings",
@@ -261,7 +262,6 @@ fun WithdrawalTab(
                             Text(formatInr(totalWithdrawn), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = EarthGold)
                         }
                     }
-
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = if (isTamil) "கணக்கீடு: மொத்த வேலை வருவாய் – மொத்த செயல்பாட்டுச் செலவுகள் – மொத்த பங்குதாரர் எடுப்புகள்" else "Calculated as: Total Received Jobs – Total Operating Expenses – Total Partner Drawings",
@@ -272,7 +272,6 @@ fun WithdrawalTab(
                 }
             }
         }
-
         // 3. Collapsible Filter Section
         item {
             CollapsibleFilterCard(
@@ -323,7 +322,6 @@ fun WithdrawalTab(
                 }
             }
         }
-
         // 4. Dynamic Pie Chart Component
         item {
             PartnerWithdrawalPieChart(
@@ -331,7 +329,6 @@ fun WithdrawalTab(
                 totalAmount = currentFilteredTotal
             )
         }
-
         // 5. Partner-Wise Breakdown Cards
         item(key = "section_partner_breakdown_header") {
             Text(
@@ -342,7 +339,6 @@ fun WithdrawalTab(
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
-
         items(partners, key = { "partner_balance_${it.id}_${it.name}" }) { partner ->
             val pWithdrawals = filteredWithdrawals.filter { it.partnerName.contains(partner.name, ignoreCase = true) }
             val pTotal = pWithdrawals.sumOf { it.amount }
@@ -352,7 +348,6 @@ fun WithdrawalTab(
             } else {
                 0f
             }
-
             Card(
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -397,7 +392,6 @@ fun WithdrawalTab(
                                 )
                             }
                         }
-
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
                                 text = formatInr(pTotal),
@@ -413,7 +407,6 @@ fun WithdrawalTab(
                             )
                         }
                     }
-
                     Spacer(modifier = Modifier.height(8.dp))
                     LinearProgressIndicator(
                         progress = { if (pPercent.isNaN()) 0f else pPercent.coerceIn(0f, 1f) },
@@ -427,7 +420,6 @@ fun WithdrawalTab(
                 }
             }
         }
-
         // 6. Past Withdrawals List Header
         item(key = "section_past_withdrawals_header") {
             Text(
@@ -438,7 +430,6 @@ fun WithdrawalTab(
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
-
         if (filteredWithdrawals.isEmpty()) {
             item(key = "section_empty_withdrawals") {
                 Card(
@@ -490,7 +481,6 @@ fun WithdrawalTab(
             }
         }
     }
-
     // Take Amount Dialog
     if (showTakeAmountDialog) {
         TakeAmountDialog(
@@ -506,7 +496,6 @@ fun WithdrawalTab(
             }
         )
     }
-
     // Confirm Delete Dialog
     withdrawalToDelete?.let { w ->
         AlertDialog(
@@ -537,7 +526,6 @@ fun WithdrawalTab(
         )
     }
 }
-
 @Composable
 fun WithdrawalItemCard(
     withdrawal: WithdrawalEntity,
@@ -577,7 +565,6 @@ fun WithdrawalItemCard(
                         modifier = Modifier.size(22.dp)
                     )
                 }
-
                 Column(modifier = Modifier.weight(1f)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -597,7 +584,6 @@ fun WithdrawalItemCard(
                             color = EarthGold
                         )
                     }
-
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = if (isTamil) "காரணம்/வகை: ${getLocalizedWithdrawalCategory(withdrawal.category, isTamil)}" else "Category: ${withdrawal.category}",
@@ -614,11 +600,9 @@ fun WithdrawalItemCard(
                     }
                 }
             }
-
             Spacer(modifier = Modifier.height(8.dp))
             Divider(color = SageOutline.copy(alpha = 0.4f))
             Spacer(modifier = Modifier.height(6.dp))
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -630,7 +614,6 @@ fun WithdrawalItemCard(
                     color = SageAccent,
                     modifier = Modifier.weight(1f, fill = false)
                 )
-
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(18.dp)
@@ -642,7 +625,6 @@ fun WithdrawalItemCard(
                         tint = SuccessPaidGreen,
                         iconSize = 20.dp
                     )
-
                     IconButton(
                         onClick = onDelete,
                         modifier = Modifier
@@ -661,7 +643,6 @@ fun WithdrawalItemCard(
         }
     }
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TakeAmountDialog(
@@ -684,16 +665,18 @@ fun TakeAmountDialog(
     var note by remember { mutableStateOf("") }
     var hasAttemptedSubmit by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
-
     var partnerDropdownExpanded by remember { mutableStateOf(false) }
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
-
+    val coroutineScope = rememberCoroutineScope()
+    val partnerRequester = remember { BringIntoViewRequester() }
+    val categoryRequester = remember { BringIntoViewRequester() }
+    val dialogAmountRequester = remember { BringIntoViewRequester() }
+    val dialogNotesRequester = remember { BringIntoViewRequester() }
     val enteredAmount = amountText.toDoubleOrNull() ?: 0.0
     val isAmountZeroOrNegative = enteredAmount <= 0
     val isAmountExceedsBalance = enteredAmount > availableAmount
     val isAmountInvalid = isAmountZeroOrNegative || isAmountExceedsBalance
     val isPartnerInvalid = selectedPartner.isBlank()
-
     AlertDialog(
         onDismissRequest = {
             if (!isSubmitting) onDismiss()
@@ -741,7 +724,6 @@ fun TakeAmountDialog(
                         )
                     }
                 }
-
                 // Select Partner
                 ExposedDropdownMenuBox(
                     expanded = partnerDropdownExpanded,
@@ -765,7 +747,8 @@ fun TakeAmountDialog(
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = partnerDropdownExpanded) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor(),
+                            .menuAnchor()
+                            .trackFocusedField(partnerRequester, coroutineScope),
                         shape = RoundedCornerShape(10.dp)
                     )
                     ExposedDropdownMenu(
@@ -783,7 +766,6 @@ fun TakeAmountDialog(
                         }
                     }
                 }
-
                 // Amount
                 OutlinedTextField(
                     value = amountText,
@@ -809,10 +791,10 @@ fun TakeAmountDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .trackFocusedField(dialogAmountRequester, coroutineScope)
                         .testTag("withdrawal_amount_input"),
                     shape = RoundedCornerShape(10.dp)
                 )
-
                 // Category
                 ExposedDropdownMenuBox(
                     expanded = categoryDropdownExpanded,
@@ -826,7 +808,8 @@ fun TakeAmountDialog(
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryDropdownExpanded) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor(),
+                            .menuAnchor()
+                            .trackFocusedField(categoryRequester, coroutineScope),
                         shape = RoundedCornerShape(10.dp)
                     )
                     ExposedDropdownMenu(
@@ -844,14 +827,15 @@ fun TakeAmountDialog(
                         }
                     }
                 }
-
                 // Note
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
                     label = { Text(if (isTamil) "குறிப்பு (விருப்பத்தேர்வு)" else "Note (Optional)") },
                     maxLines = 2,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .trackFocusedField(dialogNotesRequester, coroutineScope),
                     shape = RoundedCornerShape(10.dp)
                 )
             }

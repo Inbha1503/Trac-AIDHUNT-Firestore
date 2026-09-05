@@ -141,7 +141,7 @@ class TractorRepository(private val database: AppDatabase) {
         }
 
         val safeJobId = if (job.id > 0) job.id else IdGenerator.generateId()
-        val localJob = job.copy(id = safeJobId, customerId = customerId)
+        val localJob = job.copy(id = safeJobId, customerId = customerId, createdAt = System.currentTimeMillis())
         jobEntryDao.insertJob(localJob)
 
         // If optional linked expense was provided, add it
@@ -171,35 +171,92 @@ class TractorRepository(private val database: AppDatabase) {
         note: String,
         operatorName: String
     ): Long {
-        val methodDesc = if (paymentMethod.isNotBlank()) "Payment Method: $paymentMethod" else ""
-        val noteDesc = if (note.isNotBlank()) "Note: $note" else ""
-        val combinedNotes = listOf(methodDesc, noteDesc).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { "Direct Payment Received" }
+        // 1. Validate amount against outstanding due
+        val currentBalanceDue = customer.balanceDue
+        val displayDue = String.format(java.util.Locale.US, "%.0f", currentBalanceDue).toDoubleOrNull() ?: currentBalanceDue
+        if (amount > displayDue) {
+            throw IllegalArgumentException("Payment amount $amount cannot be greater than outstanding due $displayDue")
+        }
 
-        val safeEntryId = IdGenerator.generateId()
-        val paymentEntry = JobEntryEntity(
-            id = safeEntryId,
-            customerId = customer.id,
-            customerName = customer.name,
-            customerPhone = customer.phone,
-            customerLocation = customer.location,
-            operatorName = operatorName.ifBlank { "Partner" },
-            tractorId = 0,
-            tractorLabel = "Payment",
-            workType = "Payment Received",
-            startTimeMillis = dateTimestamp,
-            endTimeMillis = dateTimestamp,
-            durationMinutes = 0,
-            hourlyRate = 0.0,
-            totalAmount = 0.0,
-            amountReceived = amount,
-            pendingAmount = -amount,
-            addedByPartner = operatorName.ifBlank { "Partner" },
-            notes = combinedNotes
-        )
+        // 2. Fetch all jobs for the customer
+        val jobs = jobEntryDao.getJobsForCustomer(customer.id).firstOrNull() ?: emptyList()
 
-        jobEntryDao.insertJob(paymentEntry)
+        // 3. Find job entries with pending dues and sort by startTimeMillis (oldest first)
+        val unpaidJobs = jobs.filter { it.tractorLabel != "Payment" && it.pendingAmount > 0.0 }
+                            .sortedBy { it.startTimeMillis }
+
+        var remainingPayment = amount
+        val updatedJobsList = mutableListOf<JobEntryEntity>()
+
+        for (job in unpaidJobs) {
+            if (remainingPayment <= 0.0) break
+
+            val currentPending = job.pendingAmount
+            val allocation = minOf(remainingPayment, currentPending)
+
+            val newAmountReceived = job.amountReceived + allocation
+            val newPendingAmount = job.totalAmount - newAmountReceived
+
+            // Combine note with existing notes
+            val notePart = if (note.isNotBlank()) "Payment Note: $note" else ""
+            val methodPart = if (paymentMethod.isNotBlank()) "Payment Method: $paymentMethod" else ""
+            val paymentNotes = listOf(methodPart, notePart).filter { it.isNotBlank() }.joinToString(" • ")
+
+            val updatedNotes = if (paymentNotes.isNotBlank()) {
+                if (job.notes.isNotBlank()) "${job.notes} • $paymentNotes" else paymentNotes
+            } else {
+                job.notes
+            }
+
+            val updatedJob = job.copy(
+                amountReceived = newAmountReceived,
+                pendingAmount = newPendingAmount,
+                notes = updatedNotes,
+                createdAt = System.currentTimeMillis()
+            )
+            updatedJobsList.add(updatedJob)
+            remainingPayment -= allocation
+        }
+
+        // 4. Update the jobs in database
+        for (updatedJob in updatedJobsList) {
+            jobEntryDao.insertJob(updatedJob)
+        }
+
+        // 5. If there is still remainingPayment, create a payment record (fallback)
+        var fallbackPaymentId: Long? = null
+        if (remainingPayment > 0.0) {
+            val methodDesc = if (paymentMethod.isNotBlank()) "Payment Method: $paymentMethod" else ""
+            val noteDesc = if (note.isNotBlank()) "Note: $note" else ""
+            val combinedNotes = listOf(methodDesc, noteDesc).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { "Direct Payment Received" }
+
+            val safeEntryId = IdGenerator.generateId()
+            val paymentEntry = JobEntryEntity(
+                id = safeEntryId,
+                customerId = customer.id,
+                customerName = customer.name,
+                customerPhone = customer.phone,
+                customerLocation = customer.location,
+                operatorName = operatorName.ifBlank { "Partner" },
+                tractorId = 0,
+                tractorLabel = "Payment",
+                workType = "Payment Received",
+                startTimeMillis = dateTimestamp,
+                endTimeMillis = dateTimestamp,
+                durationMinutes = 0,
+                hourlyRate = 0.0,
+                totalAmount = 0.0,
+                amountReceived = remainingPayment,
+                pendingAmount = -remainingPayment,
+                addedByPartner = operatorName.ifBlank { "Partner" },
+                notes = combinedNotes
+            )
+            jobEntryDao.insertJob(paymentEntry)
+            fallbackPaymentId = safeEntryId
+        }
+
         recalculateCustomerStats(customer.id)
-        return safeEntryId
+        return fallbackPaymentId ?: (updatedJobsList.lastOrNull()?.id ?: 0L)
     }
 
     private suspend fun recalculateCustomerStats(customerId: Long) {

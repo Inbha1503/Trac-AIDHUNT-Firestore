@@ -1,0 +1,2 @@
+#!/bin/bash
+sed -i 's/var gstNumber by remember { mutableStateOf(settings.gstNumber) }/var gstNumber by remember { mutableStateOf(settings.gstNumber) }\n    val coroutineScope = rememberCoroutineScope()\n    val busNameReq = remember { BringIntoViewRequester() }\n    val pNameReq = remember { BringIntoViewRequester() }\n    val phoneReq = remember { BringIntoViewRequester() }\n    val addressReq = remember { BringIntoViewRequester() }\n    val gstReq = remember { BringIntoViewRequester() }/g' app/src/main/java/com/example/ui/screens/account/AccountScreen.kt

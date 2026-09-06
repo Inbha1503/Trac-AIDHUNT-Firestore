@@ -1,0 +1,54 @@
+--- app/src/main/java/com/example/ui/screens/report/ExpensesTab.kt
++++ app/src/main/java/com/example/ui/screens/report/ExpensesTab.kt
+@@ -43,2 +43,6 @@
+ import androidx.compose.foundation.layout.WindowInsets
++import androidx.compose.foundation.layout.asPaddingValues
++import androidx.compose.foundation.layout.ime
++import androidx.compose.foundation.layout.imePadding
++import androidx.compose.foundation.relocation.BringIntoViewRequester
++import com.example.ui.utils.trackFocusedField
+ import androidx.compose.foundation.layout.fillMaxSize
+@@ -194,2 +198,8 @@
+     val availableTractors = remember(jobs) { jobs.map { it.tractorLabel }.distinct().filter { it.isNotBlank() && it != "Payment" }.sorted() }
++    val coroutineScope = rememberCoroutineScope()
++    val searchRequester = remember { BringIntoViewRequester() }
++    val amountRequester = remember { BringIntoViewRequester() }
++    val noteRequester = remember { BringIntoViewRequester() }
++    val descRequester = remember { BringIntoViewRequester() }
++
+     var showAddExpenseDialog by remember { mutableStateOf(false) }
+@@ -404,3 +414,8 @@
+         modifier = Modifier.fillMaxSize(),
+-        contentPadding = PaddingValues(bottom = 100.dp, top = 16.dp, start = 16.dp, end = 16.dp),
++        contentPadding = PaddingValues(
++            start = 16.dp,
++            end = 16.dp,
++            top = 16.dp,
++            bottom = 100.dp + WindowInsets.ime.asPaddingValues().calculateBottomPadding()
++        ),
+         verticalArrangement = Arrangement.spacedBy(14.dp)
+@@ -714,2 +729,3 @@
+                 modifier = Modifier.fillMaxWidth()
++                    .trackFocusedField(searchRequester, coroutineScope)
+                     .testTag("expenses_search_input"),
+@@ -1942,2 +1958,8 @@
+ ) {
++    val coroutineScope = rememberCoroutineScope()
++    val addAmountRequester = remember { BringIntoViewRequester() }
++    val addNoteRequester = remember { BringIntoViewRequester() }
++    val addDescRequester = remember { BringIntoViewRequester() }
++    val addOtherTypeRequester = remember { BringIntoViewRequester() }
++
+     val context = LocalContext.current
+@@ -1961,2 +1983,3 @@
+                     modifier = Modifier.fillMaxWidth()
++                        .trackFocusedField(addAmountRequester, coroutineScope)
+                         .testTag("add_expense_amount"),
+@@ -1983,2 +2006,3 @@
+                         modifier = Modifier.fillMaxWidth()
++                            .trackFocusedField(addOtherTypeRequester, coroutineScope)
+                             .testTag("add_expense_other_type"),
+@@ -2011,2 +2035,3 @@
+                     modifier = Modifier.fillMaxWidth()
++                        .trackFocusedField(addNoteRequester, coroutineScope)
+                         .testTag("add_expense_description"),

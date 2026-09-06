@@ -1,15 +1,22 @@
-package com.example.ui.screens.report
 
+package com.example.ui.screens.report
+import androidx.compose.foundation.ExperimentalFoundationApi
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
 import androidx.activity.compose.BackHandler
+import com.example.ui.utils.trackFocusedField
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -105,7 +112,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-
 fun getLocalizedExpenseType(type: String, isTamil: Boolean): String {
     if (!isTamil) return type
     return when (type.trim().lowercase()) {
@@ -121,7 +127,6 @@ fun getLocalizedExpenseType(type: String, isTamil: Boolean): String {
         else -> type
     }
 }
-
 fun getLocalizedPaymentMode(mode: String, isTamil: Boolean): String {
     if (!isTamil) return mode
     return when (mode.trim().lowercase()) {
@@ -133,7 +138,6 @@ fun getLocalizedPaymentMode(mode: String, isTamil: Boolean): String {
         else -> mode
     }
 }
-
 fun getLocalizedDatePreset(preset: DatePreset, isTamil: Boolean): String {
     if (!isTamil) return preset.label
     return when (preset) {
@@ -143,7 +147,6 @@ fun getLocalizedDatePreset(preset: DatePreset, isTamil: Boolean): String {
         DatePreset.ALL_TIME -> "முழுவதும்"
     }
 }
-
 val ExpenseTypes = listOf(
     "Diesel",
     "Petrol",
@@ -155,7 +158,6 @@ val ExpenseTypes = listOf(
     "Toll / Parking",
     "Other"
 )
-
 val PaymentModes = listOf(
     "Cash",
     "UPI / GPay / PhonePe",
@@ -163,13 +165,11 @@ val PaymentModes = listOf(
     "Credit / Due",
     "Cheque"
 )
-
 data class ExpenseVisualConfig(
     val icon: ImageVector,
     val bgColor: Color,
     val tintColor: Color
 )
-
 fun getExpenseVisualConfig(type: String): ExpenseVisualConfig {
     return when (type.lowercase().trim()) {
         "diesel" -> ExpenseVisualConfig(
@@ -209,21 +209,18 @@ fun getExpenseVisualConfig(type: String): ExpenseVisualConfig {
         )
     }
 }
-
 enum class ExpenseScreenView {
     REPORT_LIST,
     ADD_EXPENSE,
     EDIT_EXPENSE,
     EXPENSE_DETAILS
 }
-
 enum class DatePreset(val label: String) {
     TODAY("Today"),
     THIS_WEEK("This Week"),
     THIS_MONTH("This Month"),
     ALL_TIME("All Time")
 }
-
 @Composable
 fun ExpensesTab(
     settings: AppSettingsEntity,
@@ -236,7 +233,6 @@ fun ExpensesTab(
 ) {
     var currentView by remember { mutableStateOf(ExpenseScreenView.REPORT_LIST) }
     var activeExpense by remember { mutableStateOf<ExpenseEntity?>(null) }
-
     // Intercept back button when in subview
     BackHandler(enabled = currentView != ExpenseScreenView.REPORT_LIST) {
         if (currentView == ExpenseScreenView.EDIT_EXPENSE && activeExpense != null) {
@@ -246,7 +242,6 @@ fun ExpensesTab(
             activeExpense = null
         }
     }
-
     Crossfade(targetState = currentView, label = "expense_view_transition") { viewState ->
         when (viewState) {
             ExpenseScreenView.REPORT_LIST -> {
@@ -332,7 +327,6 @@ fun ExpensesTab(
         }
     }
 }
-
 /* =========================================================================================
    1. EXPENSE REPORT LIST SCREEN (Main Screen)
    ========================================================================================= */
@@ -349,20 +343,19 @@ fun ExpenseReportListScreen(
 ) {
     val context = LocalContext.current
     val isTamil = settings.language.equals("TA", ignoreCase = true)
+    val coroutineScope = rememberCoroutineScope()
+    val searchRequester = remember { BringIntoViewRequester() }
     var searchQuery by remember { mutableStateOf("") }
     var selectedDatePreset by remember { mutableStateOf(DatePreset.ALL_TIME) }
     var customStartDate by remember { mutableLongStateOf(getStartOfDayMillis()) }
     var customEndDate by remember { mutableLongStateOf(getEndOfDayMillis()) }
-
     var selectedOperatorFilter by remember { mutableStateOf("All") }
     var selectedTractorFilter by remember { mutableStateOf("All") }
     var selectedTypeFilter by remember { mutableStateOf("All") }
-
     var isPresetMenuOpen by remember { mutableStateOf(false) }
     var isOperatorMenuOpen by remember { mutableStateOf(false) }
     var isTractorMenuOpen by remember { mutableStateOf(false) }
     var isTypeMenuOpen by remember { mutableStateOf(false) }
-
     // Filter Logic
     val filteredExpenses = expenses.filter { exp ->
         // Search
@@ -371,7 +364,6 @@ fun ExpenseReportListScreen(
                 exp.expenseType.contains(searchQuery, ignoreCase = true) ||
                 exp.operatorName.contains(searchQuery, ignoreCase = true) ||
                 exp.tractorLabel.contains(searchQuery, ignoreCase = true)
-
         // Dropdowns
         val matchesOperator = selectedOperatorFilter == "All" ||
                 exp.operatorName.contains(selectedOperatorFilter, ignoreCase = true) ||
@@ -380,7 +372,6 @@ fun ExpenseReportListScreen(
                 exp.tractorLabel.contains(selectedTractorFilter, ignoreCase = true)
         val matchesType = selectedTypeFilter == "All" ||
                 exp.expenseType.equals(selectedTypeFilter, ignoreCase = true)
-
         // Date filter
         val matchesDate = when (selectedDatePreset) {
             DatePreset.TODAY -> exp.dateTimestamp in getStartOfDayMillis()..getEndOfDayMillis()
@@ -388,23 +379,24 @@ fun ExpenseReportListScreen(
             DatePreset.THIS_MONTH -> exp.dateTimestamp in getStartOfMonthMillis()..getEndOfDayMillis()
             DatePreset.ALL_TIME -> true
         }
-
         matchesSearch && matchesOperator && matchesTractor && matchesType && matchesDate
     }
-
     val totalAmount = filteredExpenses.sumOf { it.amount }
     val totalCount = filteredExpenses.size
     val avgAmount = if (totalCount > 0) totalAmount / totalCount else 0.0
     val lowestAmount = filteredExpenses.minOfOrNull { it.amount } ?: 0.0
     val highestAmount = filteredExpenses.maxOfOrNull { it.amount } ?: 0.0
-
     val dateFormat = remember { SimpleDateFormat("dd/MM/yy\nhh:mm a", Locale.getDefault()) }
-
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFF9FAFB)),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = 12.dp,
+            bottom = 100.dp
+        ),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Top Action Header (Title + Export PDF + Add Expense Green Button)
@@ -422,7 +414,6 @@ fun ExpenseReportListScreen(
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF111827)
                 )
-
                 // Add Expense Button
                 Button(
                     onClick = onOpenAddExpense,
@@ -447,7 +438,6 @@ fun ExpenseReportListScreen(
                 }
             }
         }
-
         // Date Range Selector Row (Preset + From Date + - + To Date + Calendar Icon)
         item {
             Row(
@@ -483,7 +473,6 @@ fun ExpenseReportListScreen(
                             )
                         }
                     }
-
                     DropdownMenu(
                         expanded = isPresetMenuOpen,
                         onDismissRequest = { isPresetMenuOpen = false }
@@ -499,7 +488,6 @@ fun ExpenseReportListScreen(
                         }
                     }
                 }
-
                 // From Date Box (Clickable to pick start date)
                 Surface(
                     shape = RoundedCornerShape(8.dp),
@@ -528,14 +516,12 @@ fun ExpenseReportListScreen(
                         )
                     }
                 }
-
                 Text(
                     text = "-",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF6B7280)
                 )
-
                 // To Date Box (Clickable to pick end date)
                 Surface(
                     shape = RoundedCornerShape(8.dp),
@@ -564,7 +550,6 @@ fun ExpenseReportListScreen(
                         )
                     }
                 }
-
                 // Calendar Picker Icon
                 Surface(
                     shape = RoundedCornerShape(8.dp),
@@ -590,7 +575,6 @@ fun ExpenseReportListScreen(
                 }
             }
         }
-
         // 3 Filter Dropdowns Row: Operator, Tractor, Expense Type
         item {
             Row(
@@ -625,7 +609,6 @@ fun ExpenseReportListScreen(
                         )
                     }
                 }
-
                 // 2. Tractor Filter
                 FilterDropdownButton(
                     modifier = Modifier.weight(1f),
@@ -654,7 +637,6 @@ fun ExpenseReportListScreen(
                         )
                     }
                 }
-
                 // 3. Expense Type Filter
                 FilterDropdownButton(
                     modifier = Modifier.weight(1f),
@@ -685,7 +667,6 @@ fun ExpenseReportListScreen(
                 }
             }
         }
-
         // Search Description Field
         item {
             OutlinedTextField(
@@ -722,10 +703,10 @@ fun ExpenseReportListScreen(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .trackFocusedField(searchRequester, coroutineScope)
                     .testTag("expense_search_bar")
             )
         }
-
         // 3 Stat Cards: Total Expenses, Total Entries, Avg. per Entry
         item {
             Row(
@@ -743,7 +724,6 @@ fun ExpenseReportListScreen(
                     title = if (isTamil) "மொத்த செலவுகள்" else "Total Expenses",
                     value = formatInr(totalAmount, settings.currency)
                 )
-
                 // Card 2: Total Entries
                 StatCard(
                     modifier = Modifier.weight(1f),
@@ -753,7 +733,6 @@ fun ExpenseReportListScreen(
                     title = if (isTamil) "மொத்த பதிவுகள்" else "Total Entries",
                     value = "$totalCount"
                 )
-
                 // Card 3: Avg. per Entry
                 StatCard(
                     modifier = Modifier.weight(1f),
@@ -765,7 +744,6 @@ fun ExpenseReportListScreen(
                 )
             }
         }
-
         // Expense List Items or Empty State
         if (filteredExpenses.isEmpty()) {
             item {
@@ -821,7 +799,6 @@ fun ExpenseReportListScreen(
                 )
             }
         }
-
         // Footer Summary: Lowest Expense & Highest Expense
         if (filteredExpenses.isNotEmpty()) {
             item {
@@ -853,14 +830,12 @@ fun ExpenseReportListScreen(
                                 color = Color(0xFF16A34A)
                             )
                         }
-
                         Divider(
                             modifier = Modifier
                                 .height(32.dp)
                                 .width(1.dp),
                             color = Color(0xFFE5E7EB)
                         )
-
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = if (isTamil) "அதிகபட்ச செலவு" else "Highest Expense",
@@ -882,7 +857,6 @@ fun ExpenseReportListScreen(
         }
     }
 }
-
 /* =========================================================================================
    Filter Dropdown Button Component
    ========================================================================================= */
@@ -899,7 +873,6 @@ fun FilterDropdownButton(
     content: @Composable () -> Unit
 ) {
     val isFiltered = selectedValue != "All" && selectedValue.isNotBlank()
-
     Box(modifier = modifier) {
         Surface(
             shape = RoundedCornerShape(8.dp),
@@ -954,7 +927,6 @@ fun FilterDropdownButton(
                 }
             }
         }
-
         DropdownMenu(
             expanded = isOpen,
             onDismissRequest = onDismiss
@@ -963,7 +935,6 @@ fun FilterDropdownButton(
         }
     }
 }
-
 /* =========================================================================================
    Stat Card Component
    ========================================================================================= */
@@ -1030,7 +1001,6 @@ fun StatCard(
         }
     }
 }
-
 /* =========================================================================================
    Expense List Item Row
    ========================================================================================= */
@@ -1047,7 +1017,6 @@ fun ExpenseListItemRow(
     var isMenuExpanded by remember { mutableStateOf(false) }
     val visualConfig = getExpenseVisualConfig(expense.expenseType)
     val itemDateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", if (isTamil) Locale("ta", "IN") else Locale.getDefault()) }
-
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -1079,7 +1048,6 @@ fun ExpenseListItemRow(
                     modifier = Modifier.size(22.dp)
                 )
             }
-
             // Middle Info Column (Expense Type, Tractor, Operator, Description)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -1118,7 +1086,6 @@ fun ExpenseListItemRow(
                     )
                 }
             }
-
             // Right Column: Amount + 3-dots Menu + Date
             Column(
                 horizontalAlignment = Alignment.End
@@ -1133,7 +1100,6 @@ fun ExpenseListItemRow(
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFDC2626)
                     )
-
                     Box {
                         IconButton(
                             onClick = { isMenuExpanded = true },
@@ -1146,7 +1112,6 @@ fun ExpenseListItemRow(
                                 modifier = Modifier.size(16.dp)
                             )
                         }
-
                         DropdownMenu(
                             expanded = isMenuExpanded,
                             onDismissRequest = { isMenuExpanded = false }
@@ -1186,7 +1151,6 @@ fun ExpenseListItemRow(
                         }
                     }
                 }
-
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = itemDateFormat.format(Date(expense.dateTimestamp)),
@@ -1197,7 +1161,6 @@ fun ExpenseListItemRow(
         }
     }
 }
-
 /* =========================================================================================
    2. ADD / EDIT EXPENSE SCREEN
    ========================================================================================= */
@@ -1213,7 +1176,6 @@ fun AddOrEditExpenseScreen(
 ) {
     val context = LocalContext.current
     val isTamil = settings.language.equals("TA", ignoreCase = true)
-
     // Operator Default: If creating a new expense, default to whoever is logged in (settings.activePartnerName)
     val defaultOperatorName = remember(initialExpense, settings.activePartnerName, partners) {
         if (initialExpense != null) {
@@ -1231,7 +1193,6 @@ fun AddOrEditExpenseScreen(
                 }
         }
     }
-
     var selectedTimestamp by remember { mutableLongStateOf(initialExpense?.dateTimestamp ?: System.currentTimeMillis()) }
     var selectedType by remember { mutableStateOf(initialExpense?.expenseType ?: "Diesel") }
     var selectedOperator by remember { mutableStateOf(defaultOperatorName) }
@@ -1241,17 +1202,13 @@ fun AddOrEditExpenseScreen(
     var amountText by remember { mutableStateOf(if (initialExpense != null) initialExpense.amount.toInt().toString() else "") }
     var descriptionText by remember { mutableStateOf(initialExpense?.description ?: "") }
     var paymentMode by remember { mutableStateOf("Cash") }
-
     var isTypeDropdownOpen by remember { mutableStateOf(false) }
     var isOperatorDropdownOpen by remember { mutableStateOf(false) }
     var isTractorDropdownOpen by remember { mutableStateOf(false) }
     var isPaymentModeDropdownOpen by remember { mutableStateOf(false) }
-
     var hasValidated by remember { mutableStateOf(false) }
     val isAmountValid = (amountText.toDoubleOrNull() ?: 0.0) > 0
-
     val formDateFormat = remember { SimpleDateFormat("dd/MM/yyyy  hh:mm a", if (isTamil) Locale("ta", "IN") else java.util.Locale.getDefault()) }
-
     fun doSave() {
         hasValidated = true
         val amt = amountText.toDoubleOrNull() ?: 0.0
@@ -1272,7 +1229,6 @@ fun AddOrEditExpenseScreen(
             onSaveExpense(expense)
         }
     }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1306,7 +1262,6 @@ fun AddOrEditExpenseScreen(
                         fontWeight = FontWeight.Bold
                     )
                 }
-
                 // Top Right Save Text + Icon Button
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -1331,12 +1286,10 @@ fun AddOrEditExpenseScreen(
                 }
             }
         }
-
         // Form Body
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .imePadding()
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
@@ -1359,7 +1312,6 @@ fun AddOrEditExpenseScreen(
                             }
                         }
                     )
-
                     // Expense Type Field
                     Box(modifier = Modifier.weight(1f)) {
                         FormFieldCard(
@@ -1369,7 +1321,6 @@ fun AddOrEditExpenseScreen(
                             isDropdown = true,
                             onClick = { isTypeDropdownOpen = true }
                         )
-
                         DropdownMenu(
                             expanded = isTypeDropdownOpen,
                             onDismissRequest = { isTypeDropdownOpen = false }
@@ -1387,7 +1338,6 @@ fun AddOrEditExpenseScreen(
                     }
                 }
             }
-
             // Row 2: Operator* (Left) and Tractor (Chassis No.)* (Right)
             item {
                 Row(
@@ -1403,7 +1353,6 @@ fun AddOrEditExpenseScreen(
                             isDropdown = true,
                             onClick = { isOperatorDropdownOpen = true }
                         )
-
                         DropdownMenu(
                             expanded = isOperatorDropdownOpen,
                             onDismissRequest = { isOperatorDropdownOpen = false }
@@ -1420,7 +1369,6 @@ fun AddOrEditExpenseScreen(
                             }
                         }
                     }
-
                     // Tractor Dropdown
                     Box(modifier = Modifier.weight(1f)) {
                         FormFieldCard(
@@ -1430,7 +1378,6 @@ fun AddOrEditExpenseScreen(
                             isDropdown = true,
                             onClick = { isTractorDropdownOpen = true }
                         )
-
                         DropdownMenu(
                             expanded = isTractorDropdownOpen,
                             onDismissRequest = { isTractorDropdownOpen = false }
@@ -1448,7 +1395,6 @@ fun AddOrEditExpenseScreen(
                     }
                 }
             }
-
             // Row 3: Amount (₹)* Input
             item {
                 FormInputCard(
@@ -1463,7 +1409,6 @@ fun AddOrEditExpenseScreen(
                     testTag = "input_expense_amount"
                 )
             }
-
             // Row 4: Description / Purpose (Optional)
             item {
                 FormInputCard(
@@ -1476,7 +1421,6 @@ fun AddOrEditExpenseScreen(
                     testTag = "input_expense_description"
                 )
             }
-
             // Row 5: Payment Mode
             item {
                 Box(modifier = Modifier.fillMaxWidth()) {
@@ -1488,7 +1432,6 @@ fun AddOrEditExpenseScreen(
                         isDropdown = true,
                         onClick = { isPaymentModeDropdownOpen = true }
                     )
-
                     DropdownMenu(
                         expanded = isPaymentModeDropdownOpen,
                         onDismissRequest = { isPaymentModeDropdownOpen = false }
@@ -1505,7 +1448,6 @@ fun AddOrEditExpenseScreen(
                     }
                 }
             }
-
             // Required fields note
             item {
                 Text(
@@ -1515,7 +1457,6 @@ fun AddOrEditExpenseScreen(
                     fontWeight = FontWeight.Medium
                 )
             }
-
             // Big Green Save Button
             item {
                 Spacer(modifier = Modifier.height(10.dp))
@@ -1546,7 +1487,6 @@ fun AddOrEditExpenseScreen(
         }
     }
 }
-
 /* =========================================================================================
    3. EXPENSE DETAILS SCREEN
    ========================================================================================= */
@@ -1563,7 +1503,6 @@ fun ExpenseDetailsScreen(
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     val visualConfig = getExpenseVisualConfig(expense.expenseType)
     val detailsDateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", if (isTamil) Locale("ta", "IN") else Locale.getDefault()) }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1597,7 +1536,6 @@ fun ExpenseDetailsScreen(
                         fontWeight = FontWeight.Bold
                     )
                 }
-
                 // Top Right Edit & Share Icons
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
@@ -1612,7 +1550,6 @@ fun ExpenseDetailsScreen(
                             tint = Color.White
                         )
                     }
-
                     IconButton(
                         onClick = onEdit,
                         modifier = Modifier.testTag("btn_edit_expense_top")
@@ -1626,7 +1563,6 @@ fun ExpenseDetailsScreen(
                 }
             }
         }
-
         // Details Body
         Column(
             modifier = Modifier
@@ -1667,7 +1603,6 @@ fun ExpenseDetailsScreen(
                                 modifier = Modifier.size(24.dp)
                             )
                         }
-
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = getLocalizedExpenseType(expense.expenseType, isTamil),
@@ -1685,7 +1620,6 @@ fun ExpenseDetailsScreen(
                             )
                         }
                     }
-
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
                             text = formatInr(expense.amount, settings.currency),
@@ -1703,7 +1637,6 @@ fun ExpenseDetailsScreen(
                     }
                 }
             }
-
             // 6 Grid Details Cards
             Card(
                 shape = RoundedCornerShape(12.dp),
@@ -1735,9 +1668,7 @@ fun ExpenseDetailsScreen(
                             value = expense.operatorName.ifBlank { settings.activePartnerName }
                         )
                     }
-
                     Divider(color = Color(0xFFF3F4F6), thickness = 1.dp)
-
                     // Row 2: Tractor & Expense Type
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1756,9 +1687,7 @@ fun ExpenseDetailsScreen(
                             value = getLocalizedExpenseType(expense.expenseType, isTamil)
                         )
                     }
-
                     Divider(color = Color(0xFFF3F4F6), thickness = 1.dp)
-
                     // Row 3: Added By & Created At
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1779,9 +1708,7 @@ fun ExpenseDetailsScreen(
                     }
                 }
             }
-
             Spacer(modifier = Modifier.weight(1f))
-
             // Delete Expense Button
             OutlinedButton(
                 onClick = { showDeleteConfirmDialog = true },
@@ -1808,7 +1735,6 @@ fun ExpenseDetailsScreen(
             }
         }
     }
-
     // Confirmation Alert
     if (showDeleteConfirmDialog) {
         AlertDialog(
@@ -1839,7 +1765,6 @@ fun ExpenseDetailsScreen(
         )
     }
 }
-
 /* =========================================================================================
    Helper Form Components
    ========================================================================================= */
@@ -1871,7 +1796,6 @@ fun FormFieldCard(
                 tint = Color(0xFF16A34A),
                 modifier = Modifier.size(18.dp)
             )
-
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = label,
@@ -1890,7 +1814,6 @@ fun FormFieldCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-
             if (isDropdown) {
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
@@ -1902,7 +1825,6 @@ fun FormFieldCard(
         }
     }
 }
-
 @Composable
 fun FormInputCard(
     modifier: Modifier = Modifier,
@@ -1917,6 +1839,8 @@ fun FormInputCard(
     errorMessage: String = "",
     testTag: String = ""
 ) {
+    val coroutineScope = rememberCoroutineScope()
+    val requester = remember { BringIntoViewRequester() }
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = Color.White,
@@ -1947,7 +1871,6 @@ fun FormInputCard(
                         color = Color(0xFF16A34A)
                     )
                 }
-
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = label,
@@ -1955,7 +1878,6 @@ fun FormInputCard(
                         color = Color(0xFF6B7280),
                         fontWeight = FontWeight.Medium
                     )
-
                     OutlinedTextField(
                         value = value,
                         onValueChange = onValueChange,
@@ -1971,11 +1893,11 @@ fun FormInputCard(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .trackFocusedField(requester, coroutineScope)
                             .testTag(testTag)
                     )
                 }
             }
-
             if (isError && errorMessage.isNotBlank()) {
                 Text(
                     text = errorMessage,
@@ -1987,7 +1909,6 @@ fun FormInputCard(
         }
     }
 }
-
 @Composable
 fun DetailInfoItem(
     modifier: Modifier = Modifier,
@@ -2026,7 +1947,6 @@ fun DetailInfoItem(
         }
     }
 }
-
 /* =========================================================================================
    Date & Time Helper Utilities
    ========================================================================================= */
@@ -2048,7 +1968,6 @@ fun showDatePicker(context: Context, initialMillis: Long, onPicked: (Long) -> Un
         cal.get(Calendar.DAY_OF_MONTH)
     ).show()
 }
-
 fun showDateTimePicker(context: Context, initialMillis: Long, onPicked: (Long) -> Unit) {
     val cal = Calendar.getInstance().apply { timeInMillis = initialMillis }
     DatePickerDialog(
@@ -2078,7 +1997,6 @@ fun showDateTimePicker(context: Context, initialMillis: Long, onPicked: (Long) -
         cal.get(Calendar.DAY_OF_MONTH)
     ).show()
 }
-
 fun getStartOfDayMillis(): Long {
     return Calendar.getInstance().apply {
         set(Calendar.HOUR_OF_DAY, 0)
@@ -2087,7 +2005,6 @@ fun getStartOfDayMillis(): Long {
         set(Calendar.MILLISECOND, 0)
     }.timeInMillis
 }
-
 fun getEndOfDayMillis(): Long {
     return Calendar.getInstance().apply {
         set(Calendar.HOUR_OF_DAY, 23)
@@ -2096,7 +2013,6 @@ fun getEndOfDayMillis(): Long {
         set(Calendar.MILLISECOND, 999)
     }.timeInMillis
 }
-
 fun getStartOfWeekMillis(): Long {
     return Calendar.getInstance().apply {
         set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
@@ -2106,7 +2022,6 @@ fun getStartOfWeekMillis(): Long {
         set(Calendar.MILLISECOND, 0)
     }.timeInMillis
 }
-
 fun getStartOfMonthMillis(): Long {
     return Calendar.getInstance().apply {
         set(Calendar.DAY_OF_MONTH, 1)

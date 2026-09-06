@@ -1,5 +1,8 @@
-package com.example.ui.screens.auth
 
+package com.example.ui.screens.auth
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -41,6 +44,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import com.example.ui.utils.trackFocusedField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -73,13 +77,11 @@ import com.example.ui.theme.ForestGreenHeader
 import com.example.ui.theme.SageOutline
 import com.example.ui.theme.SoftSageGreen
 import com.example.ui.theme.rememberResponsiveDimensions
-
 enum class AuthMethod {
     PHONE,
     EMAIL,
     GOOGLE
 }
-
 @Composable
 fun LoginScreen(
     partners: List<PartnerEntity> = emptyList(),
@@ -98,13 +100,11 @@ fun LoginScreen(
     initialAuthMethod: AuthMethod = AuthMethod.PHONE
 ) {
     var selectedMethod by rememberSaveable { mutableStateOf(initialAuthMethod) }
-
     // Phone Auth State
     var phoneNumber by rememberSaveable { mutableStateOf("") }
     var otpCode by rememberSaveable { mutableStateOf("") }
     var isOtpSent by rememberSaveable { mutableStateOf(false) }
     var isRequestingOtpLocally by rememberSaveable { mutableStateOf(false) }
-
     // Email & Password Auth State
     var emailInput by rememberSaveable { mutableStateOf("") }
     var passwordInput by rememberSaveable { mutableStateOf("") }
@@ -112,20 +112,22 @@ fun LoginScreen(
     var isSignUpMode by rememberSaveable { mutableStateOf(false) }
     var emailError by rememberSaveable { mutableStateOf<String?>(null) }
     var passwordError by rememberSaveable { mutableStateOf<String?>(null) }
-
     val responsive = rememberResponsiveDimensions()
     val scrollState = rememberScrollState()
     val focusManager = LocalFocusManager.current
-
+    val coroutineScope = rememberCoroutineScope()
+    val phoneRequester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    val otpRequester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    val emailRequester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    val passwordRequester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    val adminPassRequester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
     val cleanDigits = phoneNumber.filter { it.isDigit() }
     val isPhoneValid = cleanDigits.length in 10..12
-
     fun validateAndSubmitEmail() {
         focusManager.clearFocus()
         val trimmedEmail = emailInput.trim()
         val trimmedPassword = passwordInput
         var isValid = true
-
         val emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$".toRegex()
         if (trimmedEmail.isBlank() || !emailRegex.matches(trimmedEmail)) {
             emailError = if (isTamil) "சரியான மின்னஞ்சல் முகவரியை உள்ளிடவும்" else "Please enter a valid email address"
@@ -133,14 +135,12 @@ fun LoginScreen(
         } else {
             emailError = null
         }
-
         if (trimmedPassword.length < 6) {
             passwordError = if (isTamil) "கடவுச்சொல் குறைந்தது 6 எழுத்துகள் இருக்க வேண்டும்" else "Password must be at least 6 characters"
             isValid = false
         } else {
             passwordError = null
         }
-
         if (isValid && !isLoggingIn) {
             if (isSignUpMode) {
                 onEmailSignUpRequested?.invoke(trimmedEmail, trimmedPassword)
@@ -149,7 +149,6 @@ fun LoginScreen(
             }
         }
     }
-
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = AppTheme.colors.background
@@ -196,7 +195,6 @@ fun LoginScreen(
             } else {
                 Spacer(modifier = Modifier.height(if (responsive.isSmallPhone) 10.dp else 16.dp))
             }
-
             // App Emblem
             Box(
                 modifier = Modifier
@@ -212,16 +210,13 @@ fun LoginScreen(
                     modifier = Modifier.size(if (responsive.isSmallPhone) 36.dp else 44.dp)
                 )
             }
-
             Spacer(modifier = Modifier.height(if (responsive.isSmallPhone) 8.dp else 12.dp))
-
             Text(
                 text = if (isTamil) "AIDHUNT டிராக்" else "AIDHUNT Trac",
                 fontSize = if (responsive.isSmallPhone) 22.sp else 26.sp,
                 fontWeight = FontWeight.Bold,
                 color = AppTheme.colors.textPrimary
             )
-
             Text(
                 text = if (isTamil) "பகிர்வு டிராக்டர் வணிக நிர்வாகம்" else "Shared Tractor Business Management",
                 fontSize = if (responsive.isSmallPhone) 12.sp else 14.sp,
@@ -229,7 +224,6 @@ fun LoginScreen(
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center
             )
-
             if (!errorMessage.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Card(
@@ -246,9 +240,7 @@ fun LoginScreen(
                     )
                 }
             }
-
             Spacer(modifier = Modifier.height(if (responsive.isSmallPhone) 12.dp else 16.dp))
-
             // 1. Authentication Method Selector Card (3-Tab Selector)
             Card(
                 shape = RoundedCornerShape(14.dp),
@@ -266,7 +258,6 @@ fun LoginScreen(
                         fontWeight = FontWeight.Bold,
                         color = ForestGreenHeader
                     )
-
                     Surface(
                         shape = RoundedCornerShape(10.dp),
                         color = SoftSageGreen.copy(alpha = 0.5f),
@@ -307,7 +298,6 @@ fun LoginScreen(
                                     )
                                 }
                             }
-
                             // Email & Password Option
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
@@ -337,7 +327,6 @@ fun LoginScreen(
                                     )
                                 }
                             }
-
                             // Google Option
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
@@ -371,9 +360,7 @@ fun LoginScreen(
                     }
                 }
             }
-
             Spacer(modifier = Modifier.height(if (responsive.isSmallPhone) 12.dp else 16.dp))
-
             // 2. Authentication Input & Action Based on Selected Method
             when (selectedMethod) {
                 AuthMethod.PHONE -> {
@@ -394,7 +381,6 @@ fun LoginScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = ForestGreenHeader
                             )
-
                             OutlinedTextField(
                                 value = phoneNumber,
                                 onValueChange = { phoneNumber = it },
@@ -416,6 +402,7 @@ fun LoginScreen(
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .trackFocusedField(phoneRequester, coroutineScope)
                                     .testTag("login_phone_input"),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = DeepSageGreen,
@@ -426,7 +413,6 @@ fun LoginScreen(
                                 ),
                                 shape = RoundedCornerShape(12.dp)
                             )
-
                             if (isOtpSent) {
                                 OutlinedTextField(
                                     value = otpCode,
@@ -450,6 +436,7 @@ fun LoginScreen(
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .trackFocusedField(otpRequester, coroutineScope)
                                         .testTag("login_otp_input"),
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedBorderColor = DeepSageGreen,
@@ -460,7 +447,6 @@ fun LoginScreen(
                                     ),
                                     shape = RoundedCornerShape(12.dp)
                                 )
-
                                 Button(
                                     onClick = {
                                         focusManager.clearFocus()
@@ -535,7 +521,6 @@ fun LoginScreen(
                         }
                     }
                 }
-
                 AuthMethod.EMAIL -> {
                     // --- EMAIL + PASSWORD AUTHENTICATION VIEW ---
                     Card(
@@ -559,7 +544,6 @@ fun LoginScreen(
                                     fontWeight = FontWeight.Bold,
                                     color = ForestGreenHeader
                                 )
-
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
                                     color = SoftSageGreen.copy(alpha = 0.6f),
@@ -578,7 +562,6 @@ fun LoginScreen(
                                     )
                                 }
                             }
-
                             // Email Field
                             OutlinedTextField(
                                 value = emailInput,
@@ -604,6 +587,7 @@ fun LoginScreen(
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .trackFocusedField(emailRequester, coroutineScope)
                                     .testTag("login_email_input"),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = DeepSageGreen,
@@ -614,7 +598,6 @@ fun LoginScreen(
                                 ),
                                 shape = RoundedCornerShape(12.dp)
                             )
-
                             // Password Field
                             OutlinedTextField(
                                 value = passwordInput,
@@ -661,6 +644,7 @@ fun LoginScreen(
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .trackFocusedField(passwordRequester, coroutineScope)
                                     .testTag("login_password_input"),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = DeepSageGreen,
@@ -671,7 +655,6 @@ fun LoginScreen(
                                 ),
                                 shape = RoundedCornerShape(12.dp)
                             )
-
                             // Submit Button
                             Button(
                                 onClick = { validateAndSubmitEmail() },
@@ -701,7 +684,6 @@ fun LoginScreen(
                         }
                     }
                 }
-
                 AuthMethod.GOOGLE -> {
                     // --- GOOGLE AUTHENTICATION VIEW ---
                     Card(
@@ -720,14 +702,12 @@ fun LoginScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = ForestGreenHeader
                             )
-
                             Text(
                                 text = if (isTamil) "வேகமான, பாதுகாப்பான கிளவுட் காப்புப்பிரதி மற்றும் ஒத்திசைவுக்கு உங்கள் Google கணக்குடன் நேரடியாக உள்நுழையவும்." else "Sign in directly with your Google Account for fast, secure cloud backup and synchronization.",
                                 fontSize = if (responsive.isSmallPhone) 12.sp else 13.sp,
                                 color = AppTheme.colors.textMuted,
                                 lineHeight = 18.sp
                             )
-
                             Button(
                                 onClick = {
                                     focusManager.clearFocus()
@@ -764,20 +744,16 @@ fun LoginScreen(
                     }
                 }
             }
-
             // 3. Quick Select Partner (Dynamic from App Data)
             if (partners.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(if (responsive.isSmallPhone) 14.dp else 20.dp))
-
                 Text(
                     text = if (isTamil) "— அல்லது பங்குதாரரை விரைவாகத் தேர்ந்தெடுக்கவும் —" else "— Or Quick Select Partner —",
                     fontSize = if (responsive.isSmallPhone) 11.sp else 12.sp,
                     color = AppTheme.colors.textMuted,
                     fontWeight = FontWeight.Medium
                 )
-
                 Spacer(modifier = Modifier.height(if (responsive.isSmallPhone) 8.dp else 10.dp))
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(if (responsive.isSmallPhone) 6.dp else 8.dp)
@@ -823,7 +799,6 @@ fun LoginScreen(
                     }
                 }
             }
-
             Spacer(modifier = Modifier.height(if (responsive.isSmallPhone) 12.dp else 20.dp))
         }
     }

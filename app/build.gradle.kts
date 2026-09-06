@@ -38,10 +38,10 @@ android {
       }
     }
     create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
+      storeFile = file("${rootDir}/release.jks")
+      storePassword = "aidhunttrac"
+      keyAlias = "release"
+      keyPassword = "aidhunttrac"
     }
   }
 
@@ -58,6 +58,8 @@ android {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
   }
+
+
   buildFeatures {
     compose = true
     buildConfig = true
@@ -142,4 +144,12 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
+}
+
+
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        freeCompilerArgs.addAll(listOf("-opt-in=androidx.compose.foundation.ExperimentalFoundationApi", "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api"))
+    }
 }

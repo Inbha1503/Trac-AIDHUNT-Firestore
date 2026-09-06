@@ -631,7 +631,7 @@ class WorkspaceRepository(
         // Generate globally unique collision-resistant ID before insert if new record
         val safeJobId = if (job.id > 0) job.id else IdGenerator.generateId()
         Log.d("TRAC_ENTRY", "local record saved id=$safeJobId isSynced=false jobTitle=${job.workType} wsId=$wsId")
-        val localJob = job.copy(id = safeJobId, workspaceId = wsId, customerId = customerId, isSynced = false)
+        val localJob = job.copy(id = safeJobId, workspaceId = wsId, customerId = customerId, isSynced = false, createdAt = System.currentTimeMillis())
         jobEntryDao.insertJob(localJob)
 
         var savedExpense: ExpenseEntity? = null
@@ -942,42 +942,113 @@ class WorkspaceRepository(
     ): Long {
         val isReady = isCloudReady()
         val wsId = getOrResolveWorkspaceId() ?: customer.workspaceId
-        val methodDesc = if (paymentMethod.isNotBlank()) "Payment Method: $paymentMethod" else ""
-        val noteDesc = if (note.isNotBlank()) "Note: $note" else ""
-        val combinedNotes = listOf(methodDesc, noteDesc).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { "Direct Payment Received" }
 
-        val safeEntryId = IdGenerator.generateId()
-        val paymentEntry = JobEntryEntity(
-            id = safeEntryId,
-            workspaceId = wsId,
-            customerId = customer.id,
-            customerName = customer.name,
-            customerPhone = customer.phone,
-            customerLocation = customer.location,
-            operatorName = operatorName.ifBlank { "Partner" },
-            tractorId = 0,
-            tractorLabel = "Payment",
-            workType = "Payment Received",
-            startTimeMillis = dateTimestamp,
-            endTimeMillis = dateTimestamp,
-            durationMinutes = 0,
-            hourlyRate = 0.0,
-            totalAmount = 0.0,
-            amountReceived = amount,
-            pendingAmount = -amount,
-            addedByPartner = operatorName.ifBlank { "Partner" },
-            notes = combinedNotes,
-            isSynced = false
-        )
+        // 1. Validate amount against outstanding due
+        val currentBalanceDue = customer.balanceDue
+        val displayDue = String.format(java.util.Locale.US, "%.0f", currentBalanceDue).toDoubleOrNull() ?: currentBalanceDue
+        if (amount > displayDue) {
+            throw IllegalArgumentException("Payment amount $amount cannot be greater than outstanding due $displayDue")
+        }
 
-        jobEntryDao.insertJob(paymentEntry)
+        // 2. Fetch all jobs for the customer
+        val jobs = jobEntryDao.getJobsForCustomer(customer.id).firstOrNull() ?: emptyList()
+
+        // 3. Find job entries with pending dues and sort by startTimeMillis (oldest first)
+        val unpaidJobs = jobs.filter { it.tractorLabel != "Payment" && it.pendingAmount > 0.0 }
+                            .sortedBy { it.startTimeMillis }
+
+        var remainingPayment = amount
+        val updatedJobsList = mutableListOf<JobEntryEntity>()
+
+        for (job in unpaidJobs) {
+            if (remainingPayment <= 0.0) break
+
+            val currentPending = job.pendingAmount
+            val allocation = minOf(remainingPayment, currentPending)
+
+            val newAmountReceived = job.amountReceived + allocation
+            val newPendingAmount = job.totalAmount - newAmountReceived
+
+            // Combine note with existing notes
+            val notePart = if (note.isNotBlank()) "Payment Note: $note" else ""
+            val methodPart = if (paymentMethod.isNotBlank()) "Payment Method: $paymentMethod" else ""
+            val paymentNotes = listOf(methodPart, notePart).filter { it.isNotBlank() }.joinToString(" • ")
+
+            val updatedNotes = if (paymentNotes.isNotBlank()) {
+                if (job.notes.isNotBlank()) "${job.notes} • $paymentNotes" else paymentNotes
+            } else {
+                job.notes
+            }
+
+            val updatedJob = job.copy(
+                amountReceived = newAmountReceived,
+                pendingAmount = newPendingAmount,
+                notes = updatedNotes,
+                isSynced = false,
+                createdAt = System.currentTimeMillis()
+            )
+            updatedJobsList.add(updatedJob)
+            remainingPayment -= allocation
+        }
+
+        // 4. Update the jobs in database
+        for (updatedJob in updatedJobsList) {
+            jobEntryDao.insertJob(updatedJob)
+        }
+
+        // 5. If there is still remainingPayment, create a payment record (fallback)
+        var fallbackPaymentId: Long? = null
+        if (remainingPayment > 0.0) {
+            val methodDesc = if (paymentMethod.isNotBlank()) "Payment Method: $paymentMethod" else ""
+            val noteDesc = if (note.isNotBlank()) "Note: $note" else ""
+            val combinedNotes = listOf(methodDesc, noteDesc).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { "Direct Payment Received" }
+
+            val safeEntryId = IdGenerator.generateId()
+            val paymentEntry = JobEntryEntity(
+                id = safeEntryId,
+                workspaceId = wsId,
+                customerId = customer.id,
+                customerName = customer.name,
+                customerPhone = customer.phone,
+                customerLocation = customer.location,
+                operatorName = operatorName.ifBlank { "Partner" },
+                tractorId = 0,
+                tractorLabel = "Payment",
+                workType = "Payment Received",
+                startTimeMillis = dateTimestamp,
+                endTimeMillis = dateTimestamp,
+                durationMinutes = 0,
+                hourlyRate = 0.0,
+                totalAmount = 0.0,
+                amountReceived = remainingPayment,
+                pendingAmount = -remainingPayment,
+                addedByPartner = operatorName.ifBlank { "Partner" },
+                notes = combinedNotes,
+                isSynced = false
+            )
+            jobEntryDao.insertJob(paymentEntry)
+            fallbackPaymentId = safeEntryId
+        }
+
+        // Recalculate stats for the customer
         recalculateCustomerStats(customer.id)
 
+        // Sync changes to cloud
         if (isReady && wsId.isNotBlank()) {
             scope.launch {
                 try {
-                    firestoreRepository.saveJobEntry(wsId, paymentEntry, activeUid)
-                    jobEntryDao.markJobsSynced(listOf(safeEntryId))
+                    for (updatedJob in updatedJobsList) {
+                        firestoreRepository.saveJobEntry(wsId, updatedJob, activeUid)
+                        jobEntryDao.markJobsSynced(listOf(updatedJob.id))
+                    }
+                    if (fallbackPaymentId != null) {
+                        // Fetch the fallback payment entry to sync
+                        val paymentEntry = jobEntryDao.getJobsForCustomer(customer.id).firstOrNull()?.find { it.id == fallbackPaymentId }
+                        if (paymentEntry != null) {
+                            firestoreRepository.saveJobEntry(wsId, paymentEntry, activeUid)
+                            jobEntryDao.markJobsSynced(listOf(fallbackPaymentId))
+                        }
+                    }
                     val updatedCust = customerDao.getCustomerById(customer.id)
                     if (updatedCust != null) {
                         firestoreRepository.saveCustomer(wsId, updatedCust, activeUid)
@@ -989,7 +1060,7 @@ class WorkspaceRepository(
             }
         }
 
-        return safeEntryId
+        return fallbackPaymentId ?: (updatedJobsList.lastOrNull()?.id ?: 0L)
     }
 
     private suspend fun recalculateCustomerStats(customerId: Long) {
@@ -1155,6 +1226,41 @@ class WorkspaceRepository(
             allMembers.addAll(collabMembers)
             val pendingPhones = firestoreRepository.getPendingPartnerPhones(wsId)
             for (pending in pendingPhones) {
+                val registeredUid = if (isCloudReady()) {
+                    firestoreRepository.lookupPhoneInDirectory(pending.normalizedPhone)
+                } else null
+
+                if (!registeredUid.isNullOrBlank() && registeredUid != activeUid) {
+                    try {
+                        val currentSettings = appSettingsDao.getSettingsForWorkspaceOnce(wsId)
+                        val businessName = currentSettings?.businessName?.ifBlank { "" } ?: ""
+                        firestoreRepository.addPartnerMemberDirectly(
+                            workspaceId = wsId,
+                            partnerUid = registeredUid,
+                            partnerName = pending.displayName.ifBlank { "Partner" },
+                            partnerPhone = pending.normalizedPhone,
+                            role = pending.role.ifBlank { "partner" },
+                            ownerUid = activeUid ?: "",
+                            businessName = businessName
+                        )
+                        firestoreRepository.deletePendingPartnerPhone(wsId, pending.normalizedPhone)
+                        allMembers.add(
+                            WorkspaceMember(
+                                uid = registeredUid,
+                                role = pending.role.ifBlank { "partner" },
+                                status = "active",
+                                phoneNumber = pending.normalizedPhone,
+                                displayName = pending.displayName.ifBlank { null },
+                                addedByUid = activeUid ?: "",
+                                invitedByUid = activeUid ?: ""
+                            )
+                        )
+                        continue
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Auto-promote pending partner error: ${e.message}")
+                    }
+                }
+
                 allMembers.add(
                     WorkspaceMember(
                         uid = "",

@@ -1,0 +1,48 @@
+--- app/src/main/java/com/example/ui/screens/report/CustomerCreditDueTab.kt
++++ app/src/main/java/com/example/ui/screens/report/CustomerCreditDueTab.kt
+@@ -35,2 +35,6 @@
+ import androidx.compose.foundation.layout.WindowInsets
++import androidx.compose.foundation.layout.asPaddingValues
++import androidx.compose.foundation.layout.ime
++import androidx.compose.foundation.relocation.BringIntoViewRequester
++import com.example.ui.utils.trackFocusedField
+ import androidx.compose.foundation.layout.fillMaxSize
+@@ -140,2 +144,8 @@
+ 
++    val coroutineScope = rememberCoroutineScope()
++    val searchRequester = remember { BringIntoViewRequester() }
++    val amountRequester = remember { BringIntoViewRequester() }
++    val dialogAmountRequester = remember { BringIntoViewRequester() }
++    val dialogNotesRequester = remember { BringIntoViewRequester() }
++
+     var searchQuery by rememberSaveable { mutableStateOf("") }
+@@ -375,3 +385,8 @@
+         modifier = Modifier.fillMaxSize(),
+-        contentPadding = PaddingValues(16.dp),
++        contentPadding = PaddingValues(
++            start = 16.dp,
++            end = 16.dp,
++            top = 16.dp,
++            bottom = 16.dp + WindowInsets.ime.asPaddingValues().calculateBottomPadding()
++        ),
+         verticalArrangement = Arrangement.spacedBy(14.dp)
+@@ -428,2 +443,3 @@
+                     .fillMaxWidth()
++                    .trackFocusedField(searchRequester, coroutineScope)
+                     .testTag("customer_due_search_input"),
+@@ -936,2 +952,3 @@
+                         modifier = Modifier.fillMaxWidth()
++                            .trackFocusedField(amountRequester, coroutineScope)
+                             .testTag("customer_due_receive_amount"),
+@@ -1262,2 +1279,3 @@
+                 .fillMaxWidth()
++                .imePadding()
+                 .padding(horizontal = 20.dp, vertical = 10.dp),
+@@ -1596,2 +1614,3 @@
+                     modifier = Modifier.fillMaxWidth()
++                        .trackFocusedField(dialogAmountRequester, coroutineScope)
+                         .testTag("dialog_receive_amount"),
+@@ -1713,2 +1732,3 @@
+                     modifier = Modifier.fillMaxWidth()
++                        .trackFocusedField(dialogNotesRequester, coroutineScope)
+                         .testTag("dialog_notes"),

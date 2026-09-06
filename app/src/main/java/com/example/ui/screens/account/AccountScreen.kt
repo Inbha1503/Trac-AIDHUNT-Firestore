@@ -1,10 +1,17 @@
+
+
 package com.example.ui.screens.account
+
+import androidx.compose.foundation.ExperimentalFoundationApi
 
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.example.ui.utils.trackFocusedField
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -150,7 +157,6 @@ import com.example.ui.theme.TextMutedDark
 import com.example.ui.theme.TextPrimaryDark
 import com.example.ui.theme.TextSecondaryDark
 import com.example.ui.viewmodel.AccountSubPage
-
 data class PartnerUiModel(
     val id: Long,
     val name: String,
@@ -160,11 +166,9 @@ data class PartnerUiModel(
     val isConnected: Boolean,
     val originalPartnerEntity: PartnerEntity?
 )
-
 private fun parseLongId(idStr: String): Long {
     return idStr.toLongOrNull() ?: (idStr.hashCode().toLong().let { if (it <= 0) Math.abs(it) + 1L else it })
 }
-
 @Composable
 fun AccountScreen(
     currentSubPage: AccountSubPage,
@@ -302,7 +306,6 @@ fun AccountScreen(
         }
     }
 }
-
 @Composable
 fun AccountMainDashboard(
     settings: AppSettingsEntity,
@@ -326,7 +329,6 @@ fun AccountMainDashboard(
     val context = LocalContext.current
     val isTamil = settings.language.equals("TA", ignoreCase = true)
     val responsive = com.example.ui.theme.rememberResponsiveDimensions()
-
     // Dialog States
     var showProfileDialog by remember { mutableStateOf(false) }
     var showSecurityDialog by remember { mutableStateOf(false) }
@@ -336,16 +338,13 @@ fun AccountMainDashboard(
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
     var showTermsDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
-
     // Section expansion states (all expanded by default like in screenshot)
     var isAccountExpanded by remember { mutableStateOf(true) }
     var isPreferencesExpanded by remember { mutableStateOf(true) }
     var isSupportExpanded by remember { mutableStateOf(true) }
-
     // Sub-item expansion states for Currency and Language
     var isCurrencyExpanded by remember { mutableStateOf(false) }
     var isLanguageExpanded by remember { mutableStateOf(false) }
-
     var photoToCropUri by remember { mutableStateOf<Uri?>(null) }
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -354,7 +353,6 @@ fun AccountMainDashboard(
             photoToCropUri = uri
         }
     }
-
     if (photoToCropUri != null) {
         ImageCropDialog(
             imageUri = photoToCropUri!!,
@@ -365,9 +363,7 @@ fun AccountMainDashboard(
             }
         )
     }
-
     val activePartner = partners.find { it.name.equals(settings.activePartnerName, ignoreCase = true) }
-
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -411,7 +407,6 @@ fun AccountMainDashboard(
                                 color = Color(0xFFE65100)
                             )
                         }
-
                         pendingInvitations.forEach { inv ->
                             Column(
                                 modifier = Modifier
@@ -432,7 +427,6 @@ fun AccountMainDashboard(
                                     fontSize = 12.sp,
                                     color = TextSecondaryDark
                                 )
-
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.End,
@@ -459,7 +453,6 @@ fun AccountMainDashboard(
                 }
             }
         }
-
         // =========================================================================
         // 1. Hero Profile Card (Shri Guru Agency / Owner Details) - Matching Image 2
         // =========================================================================
@@ -473,7 +466,7 @@ fun AccountMainDashboard(
                     .fillMaxWidth()
                     .testTag("account_hero_profile_card")
             ) {
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
@@ -486,6 +479,14 @@ fun AccountMainDashboard(
                             )
                         )
                 ) {
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.account_tractor_hero),
+                        contentDescription = "Account Hero Illustration",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(130.dp),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -532,7 +533,6 @@ fun AccountMainDashboard(
                                         }
                                     }
                                 }
-
                                 // Camera overlay badge
                                 Box(
                                     modifier = Modifier
@@ -550,7 +550,6 @@ fun AccountMainDashboard(
                                     )
                                 }
                             }
-
                             // Agency details
                             Column(
                                 modifier = Modifier.weight(1f),
@@ -564,7 +563,6 @@ fun AccountMainDashboard(
                                     maxLines = 1,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
-
                                 val displayPhone = if (settings.businessPhone.isNotBlank()) settings.businessPhone else settings.activePartnerPhone
                                 if (displayPhone.isNotBlank()) {
                                     Row(
@@ -587,7 +585,6 @@ fun AccountMainDashboard(
                                         )
                                     }
                                 }
-
                                 if (settings.businessAddress.isNotBlank()) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
@@ -611,7 +608,6 @@ fun AccountMainDashboard(
                                 }
                             }
                         }
-
                         // Bottom full-width dark green capsule bar (Matching Image 2)
                         Surface(
                             shape = RoundedCornerShape(12.dp),
@@ -657,7 +653,6 @@ fun AccountMainDashboard(
                 }
             }
         }
-
         // =========================================================================
         // 2. Section 1: ACCOUNT & FLEET
         // =========================================================================
@@ -676,7 +671,6 @@ fun AccountMainDashboard(
                         onClick = { showProfileDialog = true }
                     )
                     HorizontalDivider(color = Color(0xFFF3F4F6), thickness = 1.dp)
-
                     AccountSectionItem(
                         icon = Icons.Default.Agriculture,
                         title = if (isTamil) "டிராக்டர்களை நிர்வகி" else "Manage Fleet Tractors",
@@ -685,7 +679,6 @@ fun AccountMainDashboard(
                         onClick = { onNavigate(AccountSubPage.MANAGE_TRACTORS) }
                     )
                     HorizontalDivider(color = Color(0xFFF3F4F6), thickness = 1.dp)
-
                     AccountSectionItem(
                         icon = Icons.Default.People,
                         title = if (isCollaborationOwner) {
@@ -698,7 +691,6 @@ fun AccountMainDashboard(
                         onClick = { onNavigate(AccountSubPage.MANAGE_PARTNERS) }
                     )
                     HorizontalDivider(color = Color(0xFFF3F4F6), thickness = 1.dp)
-
                     AccountSectionItem(
                         icon = Icons.Default.CloudDone,
                         title = if (isTamil) "பகிர்வு மேகக்கணி ஒத்திசைவு" else "Shared Cloud Sync",
@@ -707,7 +699,6 @@ fun AccountMainDashboard(
                         onClick = { showCloudSyncDialog = true }
                     )
                     HorizontalDivider(color = Color(0xFFF3F4F6), thickness = 1.dp)
-
                     AccountSectionItem(
                         icon = Icons.Default.Security,
                         title = if (isTamil) "பயன்பாட்டு அணுகல் & பாதுகாப்பு" else "App Access & Security",
@@ -717,7 +708,6 @@ fun AccountMainDashboard(
                 }
             }
         }
-
         // =========================================================================
         // 3. Section 2: PREFERENCES
         // =========================================================================
@@ -766,7 +756,6 @@ fun AccountMainDashboard(
                         testTag = "btn_pref_currency",
                         onClick = { isCurrencyExpanded = !isCurrencyExpanded }
                     )
-
                     // Expandable Card for Currency Selection
                     AnimatedVisibility(
                         visible = isCurrencyExpanded,
@@ -850,7 +839,6 @@ fun AccountMainDashboard(
                         }
                     }
                     HorizontalDivider(color = Color(0xFFF3F4F6), thickness = 1.dp)
-
                     // Language row (Click to expand/collapse selection card underneath)
                     AccountSectionItem(
                         icon = Icons.Default.Language,
@@ -884,7 +872,6 @@ fun AccountMainDashboard(
                         testTag = "btn_pref_language",
                         onClick = { isLanguageExpanded = !isLanguageExpanded }
                     )
-
                     // Expandable Card for Language Selection
                     AnimatedVisibility(
                         visible = isLanguageExpanded,
@@ -959,7 +946,6 @@ fun AccountMainDashboard(
                         }
                     }
                     HorizontalDivider(color = Color(0xFFF3F4F6), thickness = 1.dp)
-
                     // Business Preferences row
                     AccountSectionItem(
                         icon = Icons.Default.Settings,
@@ -969,7 +955,6 @@ fun AccountMainDashboard(
                         onClick = { onNavigate(AccountSubPage.SETTINGS) }
                     )
                     HorizontalDivider(color = Color(0xFFF3F4F6), thickness = 1.dp)
-
                     // Room SQLite & Cloud Push row
                     AccountSectionItem(
                         icon = Icons.Default.Storage,
@@ -981,7 +966,6 @@ fun AccountMainDashboard(
                 }
             }
         }
-
         // =========================================================================
         // 4. Section 3: SUPPORT & LEGAL
         // =========================================================================
@@ -1000,7 +984,6 @@ fun AccountMainDashboard(
                         onClick = { showSupportDialog = true }
                     )
                     HorizontalDivider(color = Color(0xFFF3F4F6), thickness = 1.dp)
-
                     AccountSectionItem(
                         icon = Icons.Default.MenuBook,
                         title = if (isTamil) "வழிகாட்டி" else "Guide",
@@ -1008,7 +991,6 @@ fun AccountMainDashboard(
                         onClick = { showGuideDialog = true }
                     )
                     HorizontalDivider(color = Color(0xFFF3F4F6), thickness = 1.dp)
-
                     AccountSectionItem(
                         icon = Icons.Default.Policy,
                         title = if (isTamil) "தனியுரிமைக் கொள்கை" else "Privacy Policy",
@@ -1016,7 +998,6 @@ fun AccountMainDashboard(
                         onClick = { showPrivacyPolicyDialog = true }
                     )
                     HorizontalDivider(color = Color(0xFFF3F4F6), thickness = 1.dp)
-
                     AccountSectionItem(
                         icon = Icons.Default.Description,
                         title = if (isTamil) "சட்டபூர்வ, விதிமுறைகள் & நிபந்தனைகள்" else "Legal, Terms & Conditions",
@@ -1026,7 +1007,6 @@ fun AccountMainDashboard(
                 }
             }
         }
-
         // =========================================================================
         // 5. Logout Button (Matching Image 3)
         // =========================================================================
@@ -1062,11 +1042,9 @@ fun AccountMainDashboard(
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
-
     // =============================================================================
     // Dialogs
     // =============================================================================
-
     // 1. Edit Profile Information Dialog
     if (showProfileDialog) {
         EditProfileInfoDialog(
@@ -1080,7 +1058,6 @@ fun AccountMainDashboard(
             onPickPhoto = { photoPickerLauncher.launch("image/*") }
         )
     }
-
     // 2. App Access & Security Dialog
     if (showSecurityDialog) {
         AppSecurityDialog(
@@ -1089,7 +1066,6 @@ fun AccountMainDashboard(
             onDismiss = { showSecurityDialog = false }
         )
     }
-
     // 3. Shared Cloud Sync Dialog
     if (showCloudSyncDialog) {
         CloudSyncStatusDialog(
@@ -1102,7 +1078,6 @@ fun AccountMainDashboard(
             onDismiss = { showCloudSyncDialog = false }
         )
     }
-
     // 4. Help & Support Dialog (Call & WhatsApp)
     if (showSupportDialog) {
         SupportContactDialog(
@@ -1118,7 +1093,6 @@ fun AccountMainDashboard(
             }
         )
     }
-
     // 5. User Guide Dialog
     if (showGuideDialog) {
         UserGuideDialog(
@@ -1126,7 +1100,6 @@ fun AccountMainDashboard(
             onDismiss = { showGuideDialog = false }
         )
     }
-
     // 6. Privacy Policy Dialog
     if (showPrivacyPolicyDialog) {
         PrivacyPolicyDialog(
@@ -1134,7 +1107,6 @@ fun AccountMainDashboard(
             onDismiss = { showPrivacyPolicyDialog = false }
         )
     }
-
     // 7. Terms & Conditions Dialog
     if (showTermsDialog) {
         TermsAndConditionsDialog(
@@ -1142,7 +1114,6 @@ fun AccountMainDashboard(
             onDismiss = { showTermsDialog = false }
         )
     }
-
     // 8. Logout Confirmation Dialog
     if (showLogoutDialog) {
         AlertDialog(
@@ -1178,7 +1149,6 @@ fun AccountMainDashboard(
         )
     }
 }
-
 // -----------------------------------------------------------------------------
 // Component: Section Card with Expand/Collapse Header
 // -----------------------------------------------------------------------------
@@ -1221,7 +1191,6 @@ fun AccountSectionCard(
                         modifier = Modifier.size(18.dp)
                     )
                 }
-
                 Text(
                     text = title,
                     fontSize = 13.sp,
@@ -1230,7 +1199,6 @@ fun AccountSectionCard(
                     letterSpacing = 0.5.sp
                 )
             }
-
             IconButton(
                 onClick = onToggleExpand,
                 modifier = Modifier.size(28.dp)
@@ -1243,7 +1211,6 @@ fun AccountSectionCard(
                 )
             }
         }
-
         // Section Content Card
         AnimatedVisibility(
             visible = isExpanded,
@@ -1262,7 +1229,6 @@ fun AccountSectionCard(
         }
     }
 }
-
 // -----------------------------------------------------------------------------
 // Component: Section Item Row
 // -----------------------------------------------------------------------------
@@ -1300,7 +1266,6 @@ fun AccountSectionItem(
                 modifier = Modifier.size(20.dp)
             )
         }
-
         // Title
         Text(
             text = title,
@@ -1311,7 +1276,6 @@ fun AccountSectionItem(
             maxLines = 1,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
         )
-
         // Trailing Content / Badge / Chevron
         if (trailingContent != null) {
             trailingContent()
@@ -1331,7 +1295,6 @@ fun AccountSectionItem(
                 )
             }
         }
-
         if (showChevron) {
             Icon(
                 imageVector = Icons.Default.ChevronRight,
@@ -1342,7 +1305,6 @@ fun AccountSectionItem(
         }
     }
 }
-
 // -----------------------------------------------------------------------------
 // Dialog 1: Profile Information Dialog
 // -----------------------------------------------------------------------------
@@ -1359,7 +1321,12 @@ fun EditProfileInfoDialog(
     var businessPhone by remember { mutableStateOf(settings.businessPhone.ifBlank { settings.activePartnerPhone }) }
     var businessAddress by remember { mutableStateOf(settings.businessAddress) }
     var gstNumber by remember { mutableStateOf(settings.gstNumber) }
-
+    val coroutineScope = rememberCoroutineScope()
+    val busNameReq = remember { BringIntoViewRequester() }
+    val pNameReq = remember { BringIntoViewRequester() }
+    val phoneReq = remember { BringIntoViewRequester() }
+    val addressReq = remember { BringIntoViewRequester() }
+    val gstReq = remember { BringIntoViewRequester() }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -1414,31 +1381,28 @@ fun EditProfileInfoDialog(
                         }
                     }
                 }
-
                 item {
                     OutlinedTextField(
                         value = businessName,
                         onValueChange = { businessName = it },
                         label = { Text(if (isTamil) "வணிகப் பெயர்" else "Agency / Business Name") },
                         leadingIcon = { Icon(Icons.Default.Business, contentDescription = null, tint = Color(0xFF166534)) },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().trackFocusedField(busNameReq, coroutineScope),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
                     )
                 }
-
                 item {
                     OutlinedTextField(
                         value = activePartnerName,
                         onValueChange = { activePartnerName = it },
                         label = { Text(if (isTamil) "உரிமையாளர் / பங்குதாரர் பெயர்" else "Owner / Partner Name") },
                         leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF166534)) },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().trackFocusedField(pNameReq, coroutineScope),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
                     )
                 }
-
                 item {
                     OutlinedTextField(
                         value = businessPhone,
@@ -1446,31 +1410,29 @@ fun EditProfileInfoDialog(
                         label = { Text(if (isTamil) "தொலைபேசி எண்" else "Business Phone") },
                         leadingIcon = { Icon(Icons.Default.Call, contentDescription = null, tint = Color(0xFF166534)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().trackFocusedField(phoneReq, coroutineScope),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
                     )
                 }
-
                 item {
                     OutlinedTextField(
                         value = businessAddress,
                         onValueChange = { businessAddress = it },
                         label = { Text(if (isTamil) "முகவரி / இருப்பிடம்" else "Address / Location") },
                         leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color(0xFF166534)) },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().trackFocusedField(addressReq, coroutineScope),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
                     )
                 }
-
                 item {
                     OutlinedTextField(
                         value = gstNumber,
                         onValueChange = { gstNumber = it },
                         label = { Text(if (isTamil) "ஜிஎஸ்டி / பதிவு குறியீடு" else "GST / Reg Code") },
                         leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, tint = Color(0xFF166534)) },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().trackFocusedField(gstReq, coroutineScope),
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp)
                     )
@@ -1502,7 +1464,6 @@ fun EditProfileInfoDialog(
         }
     )
 }
-
 // -----------------------------------------------------------------------------
 // Dialog 2: App Access & Security Dialog
 // -----------------------------------------------------------------------------
@@ -1547,7 +1508,6 @@ fun AppSecurityDialog(
                         )
                     }
                 }
-
                 Card(
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF9FAFB)),
@@ -1569,7 +1529,6 @@ fun AppSecurityDialog(
                         )
                     }
                 }
-
                 Card(
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF9FAFB)),
@@ -1602,7 +1561,6 @@ fun AppSecurityDialog(
         }
     )
 }
-
 // -----------------------------------------------------------------------------
 // Dialog 3: Shared Cloud Sync Dialog
 // -----------------------------------------------------------------------------
@@ -1651,7 +1609,6 @@ fun CloudSyncStatusDialog(
                         )
                     }
                 }
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1665,9 +1622,7 @@ fun CloudSyncStatusDialog(
                         color = if (totalUnsyncedCount > 0) Color(0xFFD97706) else Color(0xFF166534)
                     )
                 }
-
                 Spacer(modifier = Modifier.height(4.dp))
-
                 Button(
                     onClick = {
                         onTriggerSync()
@@ -1690,7 +1645,6 @@ fun CloudSyncStatusDialog(
         }
     )
 }
-
 // -----------------------------------------------------------------------------
 // Dialog 4: Support Contact Dialog (Phone & WhatsApp)
 // -----------------------------------------------------------------------------
@@ -1722,7 +1676,6 @@ fun SupportContactDialog(
                     fontSize = 12.5.sp,
                     color = Color(0xFF374151)
                 )
-
                 // Phone Support Card
                 Card(
                     shape = RoundedCornerShape(12.dp),
@@ -1759,7 +1712,6 @@ fun SupportContactDialog(
                         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
                     }
                 }
-
                 // WhatsApp Support Card
                 Card(
                     shape = RoundedCornerShape(12.dp),
@@ -1808,7 +1760,6 @@ fun SupportContactDialog(
         }
     )
 }
-
 // -----------------------------------------------------------------------------
 // Dialog 5: User Guide Dialog
 // -----------------------------------------------------------------------------
@@ -1849,7 +1800,6 @@ fun UserGuideDialog(
                         color = Color(0xFF374151)
                     )
                 }
-
                 item {
                     Text(
                         text = if (isTamil) "⛽ 2. டீசல் & பராமரிப்பு செலவுகள்:" else "⛽ 2. Fleet Expenses & Diesel:",
@@ -1863,7 +1813,6 @@ fun UserGuideDialog(
                         color = Color(0xFF374151)
                     )
                 }
-
                 item {
                     Text(
                         text = if (isTamil) "🤝 3. 3-பங்குதாரர் பகிர்வு:" else "🤝 3. 3-Partner Live Sharing:",
@@ -1877,7 +1826,6 @@ fun UserGuideDialog(
                         color = Color(0xFF374151)
                     )
                 }
-
                 item {
                     Text(
                         text = if (isTamil) "📄 4. வாட்ஸ்அப் ரசீது:" else "📄 4. WhatsApp Billing Slips:",
@@ -1903,7 +1851,6 @@ fun UserGuideDialog(
         }
     )
 }
-
 // -----------------------------------------------------------------------------
 // Dialog 6: Terms and Conditions Dialog
 // -----------------------------------------------------------------------------
@@ -1972,7 +1919,6 @@ fun TermsAndConditionsDialog(
         }
     )
 }
-
 // -----------------------------------------------------------------------------
 // Dialog 7: Privacy Policy Dialog
 // -----------------------------------------------------------------------------
@@ -2056,7 +2002,6 @@ fun PrivacyPolicyDialog(
         }
     )
 }
-
 // ----------------------------------------------------
 // Subpage 1: Manage Fleet Tractors
 // ----------------------------------------------------
@@ -2072,7 +2017,6 @@ fun ManageTractorsPage(
     var isAddingTractor by remember { mutableStateOf(false) }
     var tractorToEdit by remember { mutableStateOf<TractorEntity?>(null) }
     var tractorToDelete by remember { mutableStateOf<TractorEntity?>(null) }
-
     if (isAddingTractor || tractorToEdit != null) {
         TractorFormPage(
             isTamil = isTamil,
@@ -2115,7 +2059,6 @@ fun ManageTractorsPage(
                     Text(if (isTamil) "புதிய டிராக்டர் சேர்க்க" else "Add New Tractor", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 }
             }
-
             if (tractors.isEmpty()) {
                 item {
                     Card(
@@ -2175,7 +2118,6 @@ fun ManageTractorsPage(
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
-
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = tractor.label,
@@ -2189,7 +2131,6 @@ fun ManageTractorsPage(
                                     color = TextSecondaryDark
                                 )
                             }
-
                             Row {
                                 IconButton(onClick = { tractorToEdit = tractor }) {
                                     Icon(Icons.Default.Edit, contentDescription = "Edit", tint = DeepSageGreen, modifier = Modifier.size(20.dp))
@@ -2204,7 +2145,6 @@ fun ManageTractorsPage(
             }
         }
     }
-
     tractorToDelete?.let { tractor ->
         AlertDialog(
             onDismissRequest = { tractorToDelete = null },
@@ -2233,7 +2173,6 @@ fun ManageTractorsPage(
         )
     }
 }
-
 @Composable
 fun TractorFormPage(
     isTamil: Boolean,
@@ -2243,14 +2182,14 @@ fun TractorFormPage(
     onDelete: ((TractorEntity) -> Unit)? = null
 ) {
     BackHandler(onBack = onBack)
-
     var label by remember { mutableStateOf(initialTractor?.label ?: "") }
     var chassisNo by remember { mutableStateOf(initialTractor?.chassisNo ?: "") }
     var hasAttemptedSubmit by remember { mutableStateOf(false) }
-
+    val coroutineScope = rememberCoroutineScope()
+    val labelRequester = remember { BringIntoViewRequester() }
+    val chassisRequester = remember { BringIntoViewRequester() }
     val isLabelInvalid = label.isBlank()
     val isChassisInvalid = chassisNo.isBlank()
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -2292,11 +2231,9 @@ fun TractorFormPage(
                 }
             }
         }
-
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .imePadding()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -2319,7 +2256,6 @@ fun TractorFormPage(
                             fontWeight = FontWeight.Bold,
                             color = ForestGreenHeader
                         )
-
                         OutlinedTextField(
                             value = label,
                             onValueChange = { label = it },
@@ -2338,9 +2274,9 @@ fun TractorFormPage(
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .trackFocusedField(labelRequester, coroutineScope)
                                 .testTag("input_tractor_name")
                         )
-
                         OutlinedTextField(
                             value = chassisNo,
                             onValueChange = { chassisNo = it },
@@ -2359,9 +2295,9 @@ fun TractorFormPage(
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .trackFocusedField(chassisRequester, coroutineScope)
                                 .testTag("input_tractor_chassis")
                         )
-
                         // Display Supported Fixed Work Attachments with Tamil Translation
                         Text(
                             text = if (isTamil) "ஆதரிக்கப்படும் பணி வகைகள்:" else "Available Work / Extension Types:",
@@ -2392,7 +2328,6 @@ fun TractorFormPage(
                     }
                 }
             }
-
             item {
                 Button(
                     onClick = {
@@ -2425,7 +2360,6 @@ fun TractorFormPage(
                     )
                 }
             }
-
             item {
                 OutlinedButton(
                     onClick = onBack,
@@ -2440,7 +2374,6 @@ fun TractorFormPage(
         }
     }
 }
-
 // ----------------------------------------------------
 // Subpage 2: Manage Partners
 // ----------------------------------------------------
@@ -2463,11 +2396,9 @@ fun ManagePartnersPage(
     var showAddDialog by remember { mutableStateOf(false) }
     var partnerToEdit by remember { mutableStateOf<PartnerEntity?>(null) }
     var partnerToDelete by remember { mutableStateOf<PartnerEntity?>(null) }
-
     val currentUid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid?.trim()
     val ownerNameClean = settings.ownerName.trim()
     val ownerPhoneClean = settings.businessPhone.filter { it.isDigit() }.takeLast(10)
-
     // Filter out local owner entities so owner never appears as a regular partner
     val filteredLocalPartners = partners.filter { partner ->
         val pPhoneClean = partner.phone.filter { it.isDigit() }.takeLast(10)
@@ -2475,12 +2406,10 @@ fun ManagePartnersPage(
         val isOwnerPhone = ownerPhoneClean.isNotBlank() && pPhoneClean == ownerPhoneClean
         !isOwnerRole && !isOwnerPhone
     }
-
     // Reconcile into unified UI models with strict Owner vs Partner display filtering
     val reconciledPartners = remember(filteredLocalPartners, workspaceMembers, currentUid, ownerPhoneClean, isCollaborationOwner, isTamil, settings.workspaceId, settings.ownerName, settings.businessPhone) {
         val list = mutableListOf<PartnerUiModel>()
         val matchedMemberKeys = mutableSetOf<String>()
-
         val ownerMember = workspaceMembers.find { it.role.equals("owner", ignoreCase = true) }
         val resolvedOwnerUid = ownerMember?.uid?.trim()?.ifBlank { null }
             ?: settings.workspaceId.removePrefix("ws_").trim()
@@ -2489,17 +2418,14 @@ fun ManagePartnersPage(
             ?: (if (isTamil) "உரிமையாளர்" else "Owner")
         val resolvedOwnerPhone = ownerMember?.phoneNumber?.trim()?.ifBlank { null }
             ?: settings.businessPhone.trim()
-
         fun isOwner(uid: String?, role: String?): Boolean {
             if (role?.equals("owner", ignoreCase = true) == true) return true
             if (!uid.isNullOrBlank() && resolvedOwnerUid.isNotBlank() && uid == resolvedOwnerUid) return true
             return false
         }
-
         fun isCurrentUser(uid: String?): Boolean {
             return !currentUid.isNullOrBlank() && !uid.isNullOrBlank() && uid == currentUid
         }
-
         // 1. If viewing as a Partner, inject the Owner row as a read-only person at the top
         if (!isCollaborationOwner) {
             val ownerModel = PartnerUiModel(
@@ -2516,7 +2442,6 @@ fun ManagePartnersPage(
                 matchedMemberKeys.add(resolvedOwnerUid)
             }
         }
-
         // 2. Process local partners and match with remote members
         for (partner in filteredLocalPartners) {
             val pPhoneClean = partner.phone.filter { it.isDigit() }.takeLast(10)
@@ -2526,21 +2451,17 @@ fun ManagePartnersPage(
                 val isPhoneMatch = mPhoneClean.isNotBlank() && mPhoneClean == pPhoneClean
                 isUidMatch || isPhoneMatch
             }
-
             // Exclude Owner from partner entries
             if (isOwner(matchedMember?.uid, matchedMember?.role ?: partner.role)) {
                 continue
             }
-
             // Exclude current logged in user (the partner themself or owner themself)
             val isSelfByUid = isCurrentUser(matchedMember?.uid) ||
                 (!currentUid.isNullOrBlank() && (partner.id == parseLongId(currentUid) || partner.id == currentUid.hashCode().toLong()))
             if (isSelfByUid) {
                 continue
             }
-
             val isConnected = matchedMember != null && matchedMember.status.equals("active", ignoreCase = true) && matchedMember.uid.isNotBlank()
-
             if (matchedMember != null) {
                 if (matchedMember.uid.isNotBlank()) {
                     matchedMemberKeys.add(matchedMember.uid)
@@ -2553,7 +2474,6 @@ fun ManagePartnersPage(
             if (pPhoneClean.isNotBlank()) {
                 matchedMemberKeys.add("phone_$pPhoneClean")
             }
-
             list.add(
                 PartnerUiModel(
                     id = partner.id,
@@ -2566,26 +2486,22 @@ fun ManagePartnersPage(
                 )
             )
         }
-
         // 3. Add remote members who aren't in the local list
         for (member in workspaceMembers) {
             // Exclude Owner
             if (isOwner(member.uid, member.role)) {
                 continue
             }
-
             // Exclude current logged in user (the partner themself or owner themself)
             if (isCurrentUser(member.uid)) {
                 continue
             }
-
             val memberPhoneClean = member.phoneNumber?.filter { it.isDigit() }?.takeLast(10) ?: ""
             val memberPhoneKey = if (memberPhoneClean.isNotBlank()) "phone_$memberPhoneClean" else ""
             if ((member.uid.isNotBlank() && matchedMemberKeys.contains(member.uid)) ||
                 (memberPhoneKey.isNotBlank() && matchedMemberKeys.contains(memberPhoneKey))) {
                 continue
             }
-
             // Prevent duplicate by phone if any
             val duplicateByPhone = list.any { p ->
                 val pPhoneClean = p.phone.filter { it.isDigit() }.takeLast(10)
@@ -2594,7 +2510,6 @@ fun ManagePartnersPage(
             if (duplicateByPhone) {
                 continue
             }
-
             val isConnectedMember = member.status.equals("active", ignoreCase = true) && member.uid.isNotBlank()
             list.add(
                 PartnerUiModel(
@@ -2608,10 +2523,8 @@ fun ManagePartnersPage(
                 )
             )
         }
-
         list
     }
-
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -2673,7 +2586,6 @@ fun ManagePartnersPage(
                 }
             }
         }
-
         if (reconciledPartners.isEmpty()) {
             item {
                 Card(
@@ -2714,7 +2626,6 @@ fun ManagePartnersPage(
                 }
             }
         }
-
         items(reconciledPartners, key = { "${it.id}_${it.phone}_${it.role}" }) { partner ->
             val isOwnerRole = partner.role.equals("owner", ignoreCase = true) ||
                 partner.role.equals("Business Owner", ignoreCase = true) ||
@@ -2724,7 +2635,6 @@ fun ManagePartnersPage(
             } else {
                 if (isTamil) "பங்குதாரர்" else "Partner"
             }
-
             Card(
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -2744,7 +2654,6 @@ fun ManagePartnersPage(
                         size = 44.dp,
                         avatarColorHex = "#1E4D2B"
                     )
-
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = partner.name,
@@ -2789,7 +2698,6 @@ fun ManagePartnersPage(
                             }
                         }
                     }
-
                     if (isCollaborationOwner) {
                         val entityToUse = partner.originalPartnerEntity ?: PartnerEntity(
                             id = partner.id,
@@ -2812,7 +2720,6 @@ fun ManagePartnersPage(
             }
         }
     }
-
     if (showAddDialog || partnerToEdit != null) {
         PartnerFormDialog(
             isTamil = isTamil,
@@ -2832,7 +2739,6 @@ fun ManagePartnersPage(
             }
         )
     }
-
     partnerToDelete?.let { partner ->
         AlertDialog(
             onDismissRequest = { partnerToDelete = null },
@@ -2864,7 +2770,6 @@ fun ManagePartnersPage(
         )
     }
 }
-
 @Composable
 fun PartnerFormDialog(
     isTamil: Boolean,
@@ -2876,11 +2781,13 @@ fun PartnerFormDialog(
     var phone by remember { mutableStateOf(initialPartner?.phone ?: "") }
     var role by remember { mutableStateOf(initialPartner?.role ?: "Partner") }
     var hasAttemptedSubmit by remember { mutableStateOf(false) }
-
+    val coroutineScope = rememberCoroutineScope()
+    val nameRequester = remember { BringIntoViewRequester() }
+    val phoneRequester = remember { BringIntoViewRequester() }
+    val roleRequester = remember { BringIntoViewRequester() }
     val isNameInvalid = name.isBlank()
     val isPhoneInvalid = phone.isBlank()
     val isRoleInvalid = role.isBlank()
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -2913,7 +2820,7 @@ fun PartnerFormDialog(
                             )
                         }
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().trackFocusedField(nameRequester, coroutineScope)
                 )
                 OutlinedTextField(
                     value = phone,
@@ -2931,7 +2838,7 @@ fun PartnerFormDialog(
                             )
                         }
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().trackFocusedField(phoneRequester, coroutineScope)
                 )
                 OutlinedTextField(
                     value = role,
@@ -2948,7 +2855,7 @@ fun PartnerFormDialog(
                             )
                         }
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().trackFocusedField(roleRequester, coroutineScope)
                 )
             }
         },
@@ -2979,7 +2886,6 @@ fun PartnerFormDialog(
         }
     )
 }
-
 // ----------------------------------------------------
 // Subpage 3: Business Settings
 // ----------------------------------------------------
@@ -2998,7 +2904,12 @@ fun BusinessSettingsPage(
     var profilePhotoUri by remember { mutableStateOf(settings.profilePhotoUri) }
     var photoToCropUri by remember { mutableStateOf<Uri?>(null) }
     var isSaved by remember { mutableStateOf(false) }
-
+    val coroutineScope = rememberCoroutineScope()
+    val busNameReq = remember { BringIntoViewRequester() }
+    val ownerNameReq = remember { BringIntoViewRequester() }
+    val phoneReq = remember { BringIntoViewRequester() }
+    val rateReq = remember { BringIntoViewRequester() }
+    val addressReq = remember { BringIntoViewRequester() }
     val photoPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -3006,7 +2917,6 @@ fun BusinessSettingsPage(
             photoToCropUri = uri
         }
     }
-
     if (photoToCropUri != null) {
         ImageCropDialog(
             imageUri = photoToCropUri!!,
@@ -3020,11 +2930,9 @@ fun BusinessSettingsPage(
             }
         )
     }
-
     LazyColumn(
         modifier = Modifier
-            .fillMaxSize()
-            .imePadding(),
+            .fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -3068,7 +2976,6 @@ fun BusinessSettingsPage(
                             )
                         }
                     }
-
                     Column(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -3084,7 +2991,6 @@ fun BusinessSettingsPage(
                             fontSize = 11.sp,
                             color = SageAccent
                         )
-
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = { photoPicker.launch("image/*") },
@@ -3101,7 +3007,6 @@ fun BusinessSettingsPage(
                 }
             }
         }
-
         item {
             Card(
                 shape = RoundedCornerShape(16.dp),
@@ -3121,7 +3026,6 @@ fun BusinessSettingsPage(
                         fontWeight = FontWeight.Bold,
                         color = ForestGreenHeader
                     )
-
                     OutlinedTextField(
                         value = businessName,
                         onValueChange = {
@@ -3130,9 +3034,8 @@ fun BusinessSettingsPage(
                         },
                         label = { Text(if (isTamil) "நிறுவனம் / தொழில் பெயர்" else "Business / Firm Name") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().trackFocusedField(busNameReq, coroutineScope)
                     )
-
                     OutlinedTextField(
                         value = ownerName,
                         onValueChange = {
@@ -3141,9 +3044,8 @@ fun BusinessSettingsPage(
                         },
                         label = { Text(if (isTamil) "உரிமையாளர் / கூட்டாண்மை பெயர்" else "Owner / Partnership Name") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().trackFocusedField(ownerNameReq, coroutineScope)
                     )
-
                     OutlinedTextField(
                         value = businessPhone,
                         onValueChange = {
@@ -3153,9 +3055,8 @@ fun BusinessSettingsPage(
                         label = { Text(if (isTamil) "தொடர்பு தொலைபேசி எண்" else "Primary Contact Phone") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().trackFocusedField(phoneReq, coroutineScope)
                     )
-
                     OutlinedTextField(
                         value = ratePerHour,
                         onValueChange = {
@@ -3165,9 +3066,8 @@ fun BusinessSettingsPage(
                         label = { Text(if (isTamil) "இயல்புநிலை கட்டணம் (${settings.currency}/Hr)" else "Default Rate (${settings.currency}/Hr)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().trackFocusedField(rateReq, coroutineScope)
                     )
-
                     OutlinedTextField(
                         value = address,
                         onValueChange = {
@@ -3176,11 +3076,9 @@ fun BusinessSettingsPage(
                         },
                         label = { Text(if (isTamil) "ஊர் / முகவரி" else "Location / Village / District") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().trackFocusedField(addressReq, coroutineScope)
                     )
-
                     Spacer(modifier = Modifier.height(4.dp))
-
                     Button(
                         onClick = {
                             val updated = settings.copy(
@@ -3207,7 +3105,6 @@ fun BusinessSettingsPage(
         }
     }
 }
-
 @Composable
 fun SqliteSyncStatusPage(
     settings: AppSettingsEntity,
@@ -3223,7 +3120,6 @@ fun SqliteSyncStatusPage(
     onTriggerSync: () -> Unit
 ) {
     val isTamil = settings.language.equals("TA", ignoreCase = true)
-
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -3251,7 +3147,6 @@ fun SqliteSyncStatusPage(
                 ),
                 label = "pulse"
             )
-
             Card(
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(
@@ -3336,7 +3231,6 @@ fun SqliteSyncStatusPage(
                             }
                         }
                     }
-
                     if (isSyncing) {
                         LinearProgressIndicator(
                             modifier = Modifier
@@ -3346,7 +3240,6 @@ fun SqliteSyncStatusPage(
                             trackColor = SoftSageGreen
                         )
                     }
-
                     Text(
                         text = if (!isOnline) {
                             if (isTamil) "இணைய இணைப்பு இல்லாதபோது எல்லா பதிவுகளும் உங்கள் மொபைலில் உள்ள SQLite தரவுத்தளத்தில் பாதுகாப்பாக சேமிக்கப்படும். மீண்டும் இணையம் கிடைக்கும்போது தானாகவே கிளவுடிற்கு அனுப்பப்படும்." else "When offline, all jobs, expenses, withdrawals, and payments persist safely inside local Room SQLite. When network connectivity is restored, they automatically sync and push to the cloud."
@@ -3357,7 +3250,6 @@ fun SqliteSyncStatusPage(
                         color = TextPrimaryDark,
                         lineHeight = 17.sp
                     )
-
                     if (onToggleSimulatedOffline != null) {
                         Divider(color = SageOutline.copy(alpha = 0.5f))
                         Row(
@@ -3392,7 +3284,6 @@ fun SqliteSyncStatusPage(
                             )
                         }
                     }
-
                     Button(
                         onClick = onTriggerSync,
                         enabled = !isSyncing,
@@ -3410,7 +3301,6 @@ fun SqliteSyncStatusPage(
                 }
             }
         }
-
         // SQLite Tables Breakdown
         item {
             Text(
@@ -3421,7 +3311,6 @@ fun SqliteSyncStatusPage(
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
-
         item {
             SqliteTableItemCard(
                 tableName = "job_entries",
@@ -3430,7 +3319,6 @@ fun SqliteSyncStatusPage(
                 isTamil = isTamil
             )
         }
-
         item {
             SqliteTableItemCard(
                 tableName = "expenses",
@@ -3439,7 +3327,6 @@ fun SqliteSyncStatusPage(
                 isTamil = isTamil
             )
         }
-
         item {
             SqliteTableItemCard(
                 tableName = "withdrawals",
@@ -3448,7 +3335,6 @@ fun SqliteSyncStatusPage(
                 isTamil = isTamil
             )
         }
-
         item {
             SqliteTableItemCard(
                 tableName = "customers",
@@ -3457,7 +3343,6 @@ fun SqliteSyncStatusPage(
                 isTamil = isTamil
             )
         }
-
         item {
             SqliteTableItemCard(
                 tableName = "app_settings",
@@ -3468,7 +3353,6 @@ fun SqliteSyncStatusPage(
         }
     }
 }
-
 @Composable
 fun SqliteTableItemCard(
     tableName: String,
@@ -3508,7 +3392,6 @@ fun SqliteTableItemCard(
                         modifier = Modifier.size(18.dp)
                     )
                 }
-
                 Column {
                     Text(
                         text = tableName,
@@ -3523,7 +3406,6 @@ fun SqliteTableItemCard(
                     )
                 }
             }
-
             Surface(
                 shape = RoundedCornerShape(8.dp),
                 color = if (unsyncedCount > 0) AlertDueRedBg else SuccessPaidGreenBg
